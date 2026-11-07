@@ -161,23 +161,23 @@ export const SiteExpensesModal: React.FC<SiteExpensesModalProps> = ({
         {/* Filters Bar */}
         <div className="bg-slate-950/40 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3">
-            <div>
+            <div className="min-w-0">
               <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">From Date:</label>
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:ring-2 focus:ring-blue-500 focus:outline-none min-w-0 max-w-full box-border [color-scheme:dark]"
               />
             </div>
 
-            <div>
+            <div className="min-w-0">
               <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">To Date:</label>
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:ring-2 focus:ring-blue-500 focus:outline-none min-w-0 max-w-full box-border [color-scheme:dark]"
               />
             </div>
 

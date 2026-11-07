@@ -268,48 +268,50 @@ export const SupervisorDashboard: React.FC = () => {
         />
       )}
 
-      {/* Tabs */}
-      <div className="flex border-b border-slate-800 space-x-6 text-sm font-semibold">
-        <button
-          onClick={() => setActiveTab('wage_requests')}
-          className={`pb-3 transition-colors ${
-            activeTab === 'wage_requests'
-              ? 'text-blue-400 border-b-2 border-blue-400'
-              : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          Labour Wage Requests ({wagePayments.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('my_wages')}
-          className={`pb-3 transition-colors ${
-            activeTab === 'my_wages'
-              ? 'text-emerald-400 border-b-2 border-emerald-400'
-              : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          My Supervisor Wages ({payments.filter((p) => p.labourerId == null && (p.category.includes('Wage') || p.category.includes('Salary') || p.category.includes('Supervisor'))).length})
-        </button>
-        <button
-          onClick={() => setActiveTab('labourers')}
-          className={`pb-3 transition-colors ${
-            activeTab === 'labourers'
-              ? 'text-blue-400 border-b-2 border-blue-400'
-              : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          Labour Roster & Wage Audit ({labourers.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('material_requests')}
-          className={`pb-3 transition-colors ${
-            activeTab === 'material_requests'
-              ? 'text-amber-400 border-b-2 border-amber-400'
-              : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          Material & Site Claims ({materialPayments.length})
-        </button>
+      {/* Tabs with Horizontal Scroll for Mobile */}
+      <div className="border-b border-slate-800 -mx-3 sm:mx-0 px-3 sm:px-0">
+        <div className="flex overflow-x-auto horizontal-scroll-container pb-2 pt-1 gap-2 sm:gap-6 text-sm font-semibold items-center">
+          <button
+            onClick={() => setActiveTab('wage_requests')}
+            className={`whitespace-nowrap flex-shrink-0 px-3.5 py-2 rounded-xl sm:rounded-none sm:px-1 sm:pb-3 transition-colors ${
+              activeTab === 'wage_requests'
+                ? 'text-blue-400 bg-blue-500/15 sm:bg-transparent sm:border-b-2 sm:border-blue-400 font-bold'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 sm:hover:bg-transparent'
+            }`}
+          >
+            Labour Wage Requests ({wagePayments.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('my_wages')}
+            className={`whitespace-nowrap flex-shrink-0 px-3.5 py-2 rounded-xl sm:rounded-none sm:px-1 sm:pb-3 transition-colors ${
+              activeTab === 'my_wages'
+                ? 'text-emerald-400 bg-emerald-500/15 sm:bg-transparent sm:border-b-2 sm:border-emerald-400 font-bold'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 sm:hover:bg-transparent'
+            }`}
+          >
+            My Supervisor Wages ({payments.filter((p) => p.labourerId == null && (p.category.includes('Wage') || p.category.includes('Salary') || p.category.includes('Supervisor'))).length})
+          </button>
+          <button
+            onClick={() => setActiveTab('labourers')}
+            className={`whitespace-nowrap flex-shrink-0 px-3.5 py-2 rounded-xl sm:rounded-none sm:px-1 sm:pb-3 transition-colors ${
+              activeTab === 'labourers'
+                ? 'text-blue-400 bg-blue-500/15 sm:bg-transparent sm:border-b-2 sm:border-blue-400 font-bold'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 sm:hover:bg-transparent'
+            }`}
+          >
+            Labour Roster & Wage Audit ({labourers.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('material_requests')}
+            className={`whitespace-nowrap flex-shrink-0 px-3.5 py-2 rounded-xl sm:rounded-none sm:px-1 sm:pb-3 transition-colors ${
+              activeTab === 'material_requests'
+                ? 'text-amber-400 bg-amber-500/15 sm:bg-transparent sm:border-b-2 sm:border-amber-400 font-bold'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 sm:hover:bg-transparent'
+            }`}
+          >
+            Material & Site Claims ({materialPayments.length})
+          </button>
+        </div>
       </div>
 
       {/* TAB 1: WAGE REQUESTS */}

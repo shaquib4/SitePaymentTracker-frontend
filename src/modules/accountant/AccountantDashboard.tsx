@@ -267,11 +267,11 @@ export const AccountantDashboard: React.FC = () => {
       )}
 
       {/* CALENDAR DATE RANGE FILTER & PERIOD SUMMARY STATS */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-5 overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center space-x-2">
-              <Calendar className="w-5 h-5 text-emerald-400" />
+              <Calendar className="w-5 h-5 text-emerald-400 flex-shrink-0" />
               <h3 className="text-base font-bold text-white uppercase tracking-wider">
                 Calendar Period Filter & Ledger Audit
               </h3>
@@ -310,38 +310,38 @@ export const AccountantDashboard: React.FC = () => {
 
         {/* Date Inputs */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end pt-3 border-t border-slate-800/80">
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">
+          <div className="min-w-0 w-full">
+            <label className="block text-xs font-semibold text-slate-400 uppercase mb-1 truncate">
               Start Date (From):
             </label>
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full min-w-0 max-w-full box-border bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 [color-scheme:dark]"
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">
+          <div className="min-w-0 w-full">
+            <label className="block text-xs font-semibold text-slate-400 uppercase mb-1 truncate">
               End Date (To):
             </label>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full min-w-0 max-w-full box-border bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 [color-scheme:dark]"
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">
+          <div className="min-w-0 w-full">
+            <label className="block text-xs font-semibold text-slate-400 uppercase mb-1 truncate">
               Category Filter:
             </label>
             <select
               value={selectedCategoryFilter || ''}
               onChange={(e) => setSelectedCategoryFilter(e.target.value || null)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full min-w-0 max-w-full box-border bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
               <option value="">All Categories</option>
               {categories.map((c) => (
@@ -352,7 +352,7 @@ export const AccountantDashboard: React.FC = () => {
             </select>
           </div>
 
-          <div>
+          <div className="min-w-0 w-full">
             <button
               type="button"
               onClick={() => {
@@ -363,9 +363,9 @@ export const AccountantDashboard: React.FC = () => {
                 setStatusFilter('');
                 setSearchFilter('');
               }}
-              className="w-full px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg text-sm border border-slate-700 transition-colors"
+              className="w-full min-w-0 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg text-sm border border-slate-700 transition-colors"
             >
-              Reset Filters
+              Reset Date & Filters
             </button>
           </div>
         </div>

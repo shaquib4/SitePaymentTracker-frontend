@@ -213,8 +213,8 @@ export const InitiatePaymentModal: React.FC<InitiatePaymentModalProps> = ({
 
           {/* Date Duration */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+            <div className="min-w-0 w-full">
+              <label className="block text-xs font-semibold text-slate-300 uppercase mb-1 truncate">
                 Start Date *
               </label>
               <input
@@ -222,12 +222,12 @@ export const InitiatePaymentModal: React.FC<InitiatePaymentModalProps> = ({
                 required
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                className="w-full min-w-0 max-w-full box-border bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500 [color-scheme:dark]"
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+            <div className="min-w-0 w-full">
+              <label className="block text-xs font-semibold text-slate-300 uppercase mb-1 truncate">
                 End Date *
               </label>
               <input
@@ -235,7 +235,7 @@ export const InitiatePaymentModal: React.FC<InitiatePaymentModalProps> = ({
                 required
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                className="w-full min-w-0 max-w-full box-border bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500 [color-scheme:dark]"
               />
             </div>
           </div>

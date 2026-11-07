@@ -452,9 +452,9 @@ export const AdminDashboard: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-6 sm:space-y-8 overflow-x-hidden">
       {/* Top Header & Year Selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-slate-900 border border-slate-800 p-4 sm:p-6 rounded-2xl shadow-xl">
         <div>
           <div className="flex items-center space-x-2">
             <h1 className="text-2xl font-black text-white tracking-tight">Admin Gatekeeper & Master Ledger</h1>
@@ -513,11 +513,11 @@ export const AdminDashboard: React.FC = () => {
       </div>
 
       {/* CALENDAR DATE RANGE FILTER & PERIOD EXPENSE HEADLINE BAR */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-5 overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center space-x-2">
-              <Calendar className="w-5 h-5 text-amber-400" />
+              <Calendar className="w-5 h-5 text-amber-400 flex-shrink-0" />
               <h3 className="text-base font-bold text-white uppercase tracking-wider">
                 Calendar Period Filter & Spend Record
               </h3>
@@ -556,38 +556,38 @@ export const AdminDashboard: React.FC = () => {
 
         {/* Date Inputs */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end pt-3 border-t border-slate-800/80">
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">
+          <div className="min-w-0 w-full">
+            <label className="block text-xs font-semibold text-slate-400 uppercase mb-1 truncate">
               Start Date (From):
             </label>
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+              className="w-full min-w-0 max-w-full box-border bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500 [color-scheme:dark]"
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">
+          <div className="min-w-0 w-full">
+            <label className="block text-xs font-semibold text-slate-400 uppercase mb-1 truncate">
               End Date (To):
             </label>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+              className="w-full min-w-0 max-w-full box-border bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500 [color-scheme:dark]"
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">
+          <div className="min-w-0 w-full">
+            <label className="block text-xs font-semibold text-slate-400 uppercase mb-1 truncate">
               Category Filter:
             </label>
             <select
               value={selectedCategoryFilter || ''}
               onChange={(e) => setSelectedCategoryFilter(e.target.value || null)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+              className="w-full min-w-0 max-w-full box-border bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
             >
               <option value="">All Categories</option>
               {categories.map((c) => (
@@ -598,7 +598,7 @@ export const AdminDashboard: React.FC = () => {
             </select>
           </div>
 
-          <div>
+          <div className="min-w-0 w-full">
             <button
               type="button"
               onClick={() => {
@@ -608,7 +608,7 @@ export const AdminDashboard: React.FC = () => {
                 setStatusFilter('');
                 setSearchFilter('');
               }}
-              className="w-full px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg text-sm border border-slate-700 transition-colors"
+              className="w-full min-w-0 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg text-sm border border-slate-700 transition-colors"
             >
               Reset Date & Filters
             </button>
@@ -677,58 +677,60 @@ export const AdminDashboard: React.FC = () => {
         selectedCategory={selectedCategoryFilter}
       />
 
-      {/* Navigation Tabs */}
-      <div className="flex border-b border-slate-800 space-x-6 text-sm font-semibold">
-        <button
-          onClick={() => setActiveTab('ledger')}
-          className={`pb-3 transition-colors ${
-            activeTab === 'ledger'
-              ? 'text-amber-400 border-b-2 border-amber-400'
-              : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          Master Payment Ledger ({filteredPayments.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('profitability')}
-          className={`pb-3 transition-colors ${
-            activeTab === 'profitability'
-              ? 'text-amber-400 border-b-2 border-amber-400'
-              : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          Sites & Profitability ({profitability.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('labourers')}
-          className={`pb-3 transition-colors ${
-            activeTab === 'labourers'
-              ? 'text-amber-400 border-b-2 border-amber-400'
-              : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          Labourers & Wage Audit ({labourers.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('employees')}
-          className={`pb-3 transition-colors ${
-            activeTab === 'employees'
-              ? 'text-amber-400 border-b-2 border-amber-400'
-              : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          Employee Roster & Deep-Dive ({users.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('sites_categories')}
-          className={`pb-3 transition-colors ${
-            activeTab === 'sites_categories'
-              ? 'text-amber-400 border-b-2 border-amber-400'
-              : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          Sites & Categories ({sites.length} Sites / {categories.length} Categories)
-        </button>
+      {/* Navigation Tabs with Smooth Horizontal Scroll on Mobile */}
+      <div className="border-b border-slate-800 -mx-3 sm:mx-0 px-3 sm:px-0">
+        <div className="flex overflow-x-auto horizontal-scroll-container pb-2 pt-1 gap-2 sm:gap-6 text-sm font-semibold items-center">
+          <button
+            onClick={() => setActiveTab('ledger')}
+            className={`whitespace-nowrap flex-shrink-0 px-3.5 py-2 rounded-xl sm:rounded-none sm:px-1 sm:pb-3 transition-colors ${
+              activeTab === 'ledger'
+                ? 'text-amber-400 bg-amber-500/15 sm:bg-transparent sm:border-b-2 sm:border-amber-400 font-bold'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 sm:hover:bg-transparent'
+            }`}
+          >
+            Master Payment Ledger ({filteredPayments.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('profitability')}
+            className={`whitespace-nowrap flex-shrink-0 px-3.5 py-2 rounded-xl sm:rounded-none sm:px-1 sm:pb-3 transition-colors ${
+              activeTab === 'profitability'
+                ? 'text-amber-400 bg-amber-500/15 sm:bg-transparent sm:border-b-2 sm:border-amber-400 font-bold'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 sm:hover:bg-transparent'
+            }`}
+          >
+            Sites & Profitability ({profitability.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('labourers')}
+            className={`whitespace-nowrap flex-shrink-0 px-3.5 py-2 rounded-xl sm:rounded-none sm:px-1 sm:pb-3 transition-colors ${
+              activeTab === 'labourers'
+                ? 'text-amber-400 bg-amber-500/15 sm:bg-transparent sm:border-b-2 sm:border-amber-400 font-bold'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 sm:hover:bg-transparent'
+            }`}
+          >
+            Labourers & Wage Audit ({labourers.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('employees')}
+            className={`whitespace-nowrap flex-shrink-0 px-3.5 py-2 rounded-xl sm:rounded-none sm:px-1 sm:pb-3 transition-colors ${
+              activeTab === 'employees'
+                ? 'text-amber-400 bg-amber-500/15 sm:bg-transparent sm:border-b-2 sm:border-amber-400 font-bold'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 sm:hover:bg-transparent'
+            }`}
+          >
+            Employee Roster & Deep-Dive ({users.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('sites_categories')}
+            className={`whitespace-nowrap flex-shrink-0 px-3.5 py-2 rounded-xl sm:rounded-none sm:px-1 sm:pb-3 transition-colors ${
+              activeTab === 'sites_categories'
+                ? 'text-amber-400 bg-amber-500/15 sm:bg-transparent sm:border-b-2 sm:border-amber-400 font-bold'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 sm:hover:bg-transparent'
+            }`}
+          >
+            Sites & Categories ({sites.length} Sites / {categories.length} Categories)
+          </button>
+        </div>
       </div>
 
       {/* TAB 1: MASTER PAYMENT LEDGER */}
