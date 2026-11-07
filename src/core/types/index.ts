@@ -4,7 +4,7 @@ export type UserRole = 'Admin' | 'Accountant' | 'Supervisor' | 'Vendor';
 
 export interface User {
   id: string;
-  email: string;
+  email?: string | null;
   fullName: string;
   phoneNumber: string;
   sixDigitUserId: string;
@@ -285,21 +285,22 @@ export interface PeriodAccessRequestDto {
 
 export interface GenerateUserRequest {
   fullName: string;
-  email: string;
+  email?: string | null;
   phoneNumber: string;
   role: UserRole;
   department: string;
 }
 
 export interface GenerateUserResponse {
-  userId: string;
+  userId?: string;
+  id?: string;
   sixDigitUserId: string;
   temporaryPassword: string;
-  email: string;
+  email?: string | null;
   fullName: string;
   phoneNumber: string;
   role: UserRole;
-  tenantId: string;
+  tenantId?: string;
 }
 
 export interface UserHistoryItem {

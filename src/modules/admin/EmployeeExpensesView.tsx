@@ -156,7 +156,7 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
-                  {userProfile.role} • {userProfile.department} • {userProfile.email}
+                  {userProfile.role} • {userProfile.department} {userProfile.email ? `• ${userProfile.email}` : ''}
                 </p>
 
                 {/* Contact Bar with click to call & WhatsApp */}

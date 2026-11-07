@@ -36,7 +36,7 @@ export const LoginPage: React.FC = () => {
         </div>
         <h2 className="text-3xl font-extrabold text-white tracking-tight">KE Payment Tracker</h2>
         <p className="mt-2 text-sm text-slate-400">
-          Construction & Contractor Multi-Tenant Payment SaaS
+          Khan Enterprises • Construction & Infrastructure Financial Management
         </p>
       </div>
 
@@ -99,7 +99,7 @@ export const LoginPage: React.FC = () => {
           </form>
 
           <div className="mt-6 pt-6 border-t border-slate-700/60">
-            <p className="text-xs text-slate-400 mb-3 font-medium">Quick Demo Credentials (BuildCon Infra):</p>
+            <p className="text-xs text-slate-400 mb-3 font-medium">Quick Demo Credentials (Khan Enterprises):</p>
             <div className="grid grid-cols-1 gap-2">
               <button
                 type="button"
@@ -122,9 +122,9 @@ export const LoginPage: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => handleQuickSelect('accountant@buildcon.com')}
+                onClick={() => handleQuickSelect('521402')}
                 className={`p-2.5 rounded-lg border text-left text-xs transition-colors flex items-center justify-between ${
-                  email === 'accountant@buildcon.com'
+                  email === '521402'
                     ? 'border-amber-500 bg-amber-950/40 text-amber-300'
                     : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-700/50'
                 }`}
@@ -132,8 +132,8 @@ export const LoginPage: React.FC = () => {
                 <div className="flex items-center space-x-2">
                   <Calculator className="w-4 h-4 text-emerald-400" />
                   <div>
-                    <span className="font-semibold block">Pooja Verma (Accountant)</span>
-                    <span className="text-[11px] text-slate-400">1-Year Restricted Ledger</span>
+                    <span className="font-semibold block">Ramesh Sharma (Accountant)</span>
+                    <span className="text-[11px] text-slate-400">User ID: 521402 (No Email Login)</span>
                   </div>
                 </div>
                 <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400">Select</span>
@@ -141,9 +141,9 @@ export const LoginPage: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => handleQuickSelect('supervisor@buildcon.com')}
+                onClick={() => handleQuickSelect('616244')}
                 className={`p-2.5 rounded-lg border text-left text-xs transition-colors flex items-center justify-between ${
-                  email === 'supervisor@buildcon.com'
+                  email === '616244'
                     ? 'border-amber-500 bg-amber-950/40 text-amber-300'
                     : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-700/50'
                 }`}
@@ -151,8 +151,8 @@ export const LoginPage: React.FC = () => {
                 <div className="flex items-center space-x-2">
                   <HardHat className="w-4 h-4 text-blue-400" />
                   <div>
-                    <span className="font-semibold block">Suresh Kumar (Supervisor)</span>
-                    <span className="text-[11px] text-slate-400">Labour & Wage Management</span>
+                    <span className="font-semibold block">Surendra Kumar (Supervisor)</span>
+                    <span className="text-[11px] text-slate-400">User ID: 616244 • Metro Project</span>
                   </div>
                 </div>
                 <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400">Select</span>
@@ -160,9 +160,9 @@ export const LoginPage: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => handleQuickSelect('admin@apex.com')}
+                onClick={() => handleQuickSelect('918234')}
                 className={`p-2.5 rounded-lg border text-left text-xs transition-colors flex items-center justify-between ${
-                  email === 'admin@apex.com'
+                  email === '918234'
                     ? 'border-amber-500 bg-amber-950/40 text-amber-300'
                     : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-700/50'
                 }`}
@@ -170,8 +170,8 @@ export const LoginPage: React.FC = () => {
                 <div className="flex items-center space-x-2">
                   <ShieldCheck className="w-4 h-4 text-purple-400" />
                   <div>
-                    <span className="font-semibold block">Vikram Singh (Tenant 2 Admin)</span>
-                    <span className="text-[11px] text-slate-400">Apex Builders (Data Isolated)</span>
+                    <span className="font-semibold block">Apex Supplies (Vendor)</span>
+                    <span className="text-[11px] text-slate-400">User ID: 918234 • Material Supplier</span>
                   </div>
                 </div>
                 <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400">Select</span>

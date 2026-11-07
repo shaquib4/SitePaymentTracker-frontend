@@ -50,12 +50,12 @@ export const Navbar: React.FC = () => {
           <div>
             <div className="flex items-center space-x-2">
               <span className="font-bold text-base tracking-tight text-white">KE Payment Tracker</span>
-              <span className="text-[10px] uppercase font-semibold bg-slate-800 text-slate-400 px-2 py-0.5 rounded">
-                SaaS
+              <span className="text-[10px] uppercase font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded">
+                Enterprise
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              Tenant: <span className="text-amber-400 font-medium">{user.tenantName}</span>
+              Company: <span className="text-amber-400 font-medium">{user.tenantName || 'Khan Enterprises'}</span>
             </p>
           </div>
         </div>

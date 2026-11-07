@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../core/api/client';
 import {
@@ -176,13 +176,18 @@ export const AdminDashboard: React.FC = () => {
     },
   });
 
-  const { data: users = [] } = useQuery<User[]>({
+  const { data: rawUsers = [] } = useQuery<User[]>({
     queryKey: ['users'],
     queryFn: async () => {
       const res = await apiClient.get<User[]>('/users');
       return res.data;
     },
   });
+
+  // Admin should not see himself in employees list
+  const users = useMemo(() => {
+    return rawUsers.filter(u => u.id !== user?.userId && (user?.email ? u.email !== user.email : true));
+  }, [rawUsers, user]);
 
   const { data: labourers = [] } = useQuery<LabourerDto[]>({
     queryKey: ['labourers'],
@@ -439,7 +444,8 @@ export const AdminDashboard: React.FC = () => {
 
   const handleCopyCredentials = () => {
     if (!generatedUserCreds) return;
-    const text = `BuildCon Employee Credentials:\nUser ID: ${generatedUserCreds.sixDigitUserId}\nEmail: ${generatedUserCreds.email}\nTemporary Password: ${generatedUserCreds.temporaryPassword}\nLogin: http://localhost:5173`;
+    const emailLine = generatedUserCreds.email ? `\nEmail: ${generatedUserCreds.email}` : '';
+    const text = `Khan Enterprises Employee Credentials:\nUser ID: ${generatedUserCreds.sixDigitUserId}${emailLine}\nTemporary Password: ${generatedUserCreds.temporaryPassword}\nLogin: http://localhost:5173`;
     navigator.clipboard.writeText(text);
     setCopiedCreds(true);
     setTimeout(() => setCopiedCreds(false), 3000);
@@ -453,7 +459,7 @@ export const AdminDashboard: React.FC = () => {
           <div className="flex items-center space-x-2">
             <h1 className="text-2xl font-black text-white tracking-tight">Admin Gatekeeper & Master Ledger</h1>
             <span className="bg-amber-500/20 text-amber-300 text-xs px-2.5 py-0.5 rounded-full font-bold border border-amber-500/30">
-              ₹30k/yr Flat SaaS
+              Khan Enterprises
             </span>
           </div>
           <p className="text-sm text-slate-400 mt-1">
@@ -1675,7 +1681,7 @@ export const AdminDashboard: React.FC = () => {
                       <span>{u.fullName}</span>
                       <ArrowRight className="w-3.5 h-3.5 ml-1.5 opacity-60 group-hover:opacity-100 text-amber-400" />
                     </button>
-                    <div className="text-xs text-slate-400 mt-0.5">{u.email}</div>
+                    <div className="text-xs text-slate-400 mt-0.5">{u.email || 'No email (6-Digit ID login)'}</div>
                   </div>
                   <span
                     className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
@@ -1767,7 +1773,7 @@ export const AdminDashboard: React.FC = () => {
                           <ArrowRight className="w-3.5 h-3.5 ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity text-amber-400" />
                         </span>
                       </button>
-                      <div className="text-xs text-slate-400">{u.email}</div>
+                      <div className="text-xs text-slate-400">{u.email || 'No email (6-Digit ID login)'}</div>
                     </td>
 
                     <td className="py-3 px-4">
@@ -1940,13 +1946,15 @@ export const AdminDashboard: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Email Address</label>
+                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                  Email Address {newUserRole === 'Admin' ? '(Required for Admin)' : '(Optional for Supervisor/Accountant)'}
+                </label>
                 <input
                   type="email"
-                  required
+                  required={newUserRole === 'Admin'}
                   value={newUserEmail}
                   onChange={(e) => setNewUserEmail(e.target.value)}
-                  placeholder="e.g. amit@buildcon.com"
+                  placeholder={newUserRole === 'Admin' ? 'admin@khanenterprises.in' : 'Optional (e.g. amit@khanenterprises.in)'}
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
               </div>
@@ -2037,7 +2045,7 @@ export const AdminDashboard: React.FC = () => {
               </div>
               <div>
                 <span className="text-slate-500 text-xs uppercase block">Email:</span>
-                <span>{generatedUserCreds.email}</span>
+                <span>{generatedUserCreds.email || 'None (Login with 6-digit User ID)'}</span>
               </div>
               <div>
                 <span className="text-slate-500 text-xs uppercase block">Temporary Password:</span>
