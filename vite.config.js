@@ -12,25 +12,42 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'icon-192x192.png', 'icon-512x512.png'],
+      includeAssets: ['icon-192x192.png', 'icon-512x512.png'],
       manifest: {
         name: 'KE Payment Tracker - Khan Enterprises',
         short_name: 'KE Tracker',
         description: 'Construction Payment, Wage & Site Expense Tracking System',
         start_url: '/',
+        scope: '/',
+        id: '/',
         display: 'standalone',
+        orientation: 'portrait-primary',
         theme_color: '#0f172a',
         background_color: '#020617',
         icons: [
           {
             src: '/icon-192x192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: '/icon-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'maskable'
           },
           {
             src: '/icon-512x512.png',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: '/icon-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
           }
         ]
       },

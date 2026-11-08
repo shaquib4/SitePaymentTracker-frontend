@@ -1,9 +1,11 @@
 import React from 'react';
 import { useAuth } from '../core/auth/AuthContext';
-import { Building2, LogOut, ShieldCheck, Calculator, HardHat, Store, User as UserIcon } from 'lucide-react';
+import { Building2, LogOut, ShieldCheck, Calculator, HardHat, Store, User as UserIcon, Smartphone } from 'lucide-react';
+import { usePwaInstall, InstallPwaModal } from './InstallPwaModal';
 
 export const Navbar: React.FC = () => {
   const { user, logout, isAdmin, isAccountant, isSupervisor } = useAuth();
+  const { isStandalone, showModal, setShowModal, triggerInstall } = usePwaInstall();
 
   if (!user) return null;
 
@@ -60,7 +62,18 @@ export const Navbar: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-2 sm:space-x-4">
+          {!isStandalone && (
+            <button
+              onClick={triggerInstall}
+              title="Install KE Payment Tracker on your phone or desktop"
+              className="inline-flex items-center space-x-1 px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-semibold transition shadow-sm"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-amber-400" />
+              <span>Install App</span>
+            </button>
+          )}
+
           <div className="hidden sm:flex items-center space-x-3 text-right">
             <div>
               <div className="flex items-center justify-end space-x-2">
@@ -83,6 +96,7 @@ export const Navbar: React.FC = () => {
           </button>
         </div>
       </div>
+      <InstallPwaModal isOpen={showModal} onClose={() => setShowModal(false)} />
     </header>
   );
 };

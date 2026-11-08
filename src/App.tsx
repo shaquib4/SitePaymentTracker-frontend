@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './core/auth/AuthContext';
 import { LoginPage } from './components/LoginPage';
 import { Navbar } from './components/Navbar';
+import { InstallPwaBanner } from './components/InstallPwaModal';
 import { Loader2 } from 'lucide-react';
 
 // Code Splitting with React.lazy() to protect Admin and Accountant bundles
@@ -93,28 +94,31 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 const DashboardRouter: React.FC = () => {
   const { isAuthenticated, user, isAdmin, isAccountant, isSupervisor } = useAuth();
 
-  if (!isAuthenticated || !user) {
-    return <LoginPage />;
-  }
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      <Navbar />
-      <main className="flex-1">
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center min-h-[60vh] text-slate-400 space-x-2">
-              <Loader2 className="w-6 h-6 animate-spin text-amber-500" />
-              <span className="text-sm font-medium">Loading Module Bundle...</span>
-            </div>
-          }
-        >
-          {isAdmin && <AdminDashboard />}
-          {isAccountant && <AccountantDashboard />}
-          {isSupervisor && <SupervisorDashboard />}
-          {!isAdmin && !isAccountant && !isSupervisor && <VendorDashboard />}
-        </Suspense>
-      </main>
+      <InstallPwaBanner />
+      {!isAuthenticated || !user ? (
+        <LoginPage />
+      ) : (
+        <>
+          <Navbar />
+          <main className="flex-1">
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center min-h-[60vh] text-slate-400 space-x-2">
+                  <Loader2 className="w-6 h-6 animate-spin text-amber-500" />
+                  <span className="text-sm font-medium">Loading Module Bundle...</span>
+                </div>
+              }
+            >
+              {isAdmin && <AdminDashboard />}
+              {isAccountant && <AccountantDashboard />}
+              {isSupervisor && <SupervisorDashboard />}
+              {!isAdmin && !isAccountant && !isSupervisor && <VendorDashboard />}
+            </Suspense>
+          </main>
+        </>
+      )}
     </div>
   );
 };
