@@ -7,6 +7,43 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0f172a" />
     <title>KE Payment Tracker - Enterprise Expense & Approval</title>
+    <script>
+      // Self-healing: if an outdated script fails to load (404), unregister old service workers and purge legacy caches
+      window.addEventListener('error', function(e) {
+        var target = e.target || e.srcElement;
+        if (target && (target.tagName === 'SCRIPT' || target.tagName === 'LINK')) {
+          console.warn('Asset failed to load, purging caches and recovering:', target.src || target.href);
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+              for (var i = 0; i < registrations.length; i++) {
+                registrations[i].unregister();
+              }
+            });
+          }
+          if ('caches' in window) {
+            caches.keys().then(function(keys) {
+              for (var j = 0; j < keys.length; j++) {
+                caches.delete(keys[j]);
+              }
+            });
+          }
+          setTimeout(function() {
+            window.location.reload();
+          }, 300);
+        }
+      }, true);
+
+      // Clean up any stale legacy caches left by old sw.js
+      if ('caches' in window) {
+        caches.keys().then(function(names) {
+          for (var k = 0; k < names.length; k++) {
+            if (names[k].indexOf('ke-payments-cache') !== -1) {
+              caches.delete(names[k]);
+            }
+          }
+        });
+      }
+    </script>
   </head>
   <body class="bg-slate-950 text-slate-100 antialiased min-h-screen">
     <div id="root"></div>
