@@ -1,7 +1,14 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../core/api/client';
-import { SiteExpenseItemDto, SiteProfitabilityDto, CategoryBreakdown } from '../core/types';
+import {
+  SiteExpenseItemDto,
+  SiteProfitabilityDto,
+  CategoryBreakdown,
+  ExpenseCategory,
+  ApprovePaymentDto
+} from '../core/types';
+import { useAuth } from '../core/auth/AuthContext';
 import { ExpensePieChart } from './ExpensePieChart';
 import {
   ArrowLeft,
@@ -16,7 +23,9 @@ import {
   AlertCircle,
   XCircle,
   RefreshCw,
-  X
+  X,
+  HelpCircle,
+  ShieldCheck
 } from 'lucide-react';
 
 export interface SiteExpensesViewProps {
@@ -38,11 +47,24 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
   isAdmin = false,
   isPageView = false,
 }) => {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
+
+  // Modals for Admin Approval & Clarification Requests
+  const [showApproveModalPayment, setShowApproveModalPayment] = useState<SiteExpenseItemDto | null>(null);
+  const [approveComments, setApproveComments] = useState('');
+  const [approveCategoryMode, setApproveCategoryMode] = useState<'existing' | 'new'>('existing');
+  const [approveSelectedCategory, setApproveSelectedCategory] = useState('');
+  const [approveNewCategoryName, setApproveNewCategoryName] = useState('');
+
+  const [showRequestInfoModalPayment, setShowRequestInfoModalPayment] = useState<SiteExpenseItemDto | null>(null);
+  const [requestInfoQuestions, setRequestInfoQuestions] = useState('');
 
   const handleBack = onBack || onClose || (() => {});
 
@@ -59,6 +81,51 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
 
       const res = await apiClient.get<SiteExpenseItemDto[]>(url);
       return res.data;
+    },
+  });
+
+  // Fetch expense categories for categorization modal
+  const { data: categories = [] } = useQuery<ExpenseCategory[]>({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const res = await apiClient.get<ExpenseCategory[]>('/categories');
+      return res.data;
+    },
+    enabled: isAdmin,
+  });
+
+  // Approval Mutation
+  const approveMutation = useMutation({
+    mutationFn: async ({ paymentId, dto }: { paymentId: string; dto: ApprovePaymentDto }) => {
+      const res = await apiClient.post(`/payments/${paymentId}/approve`, dto);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['site-expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['sites-profitability'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      setShowApproveModalPayment(null);
+      setApproveComments('');
+      setApproveNewCategoryName('');
+    },
+  });
+
+  // Request Info Mutation
+  const requestInfoMutation = useMutation({
+    mutationFn: async ({ paymentId, version, questions }: { paymentId: string; version: number; questions: string }) => {
+      const res = await apiClient.post(`/payments/${paymentId}/request-info`, {
+        version,
+        questions,
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['site-expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      setShowRequestInfoModalPayment(null);
+      setRequestInfoQuestions('');
     },
   });
 
@@ -529,6 +596,14 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                   )}
                 </div>
 
+                {/* Clarification Alert */}
+                {item.infoRequestDetails && (
+                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-2.5 text-xs text-blue-200">
+                    <span className="font-bold block text-blue-300 mb-0.5">Clarification Query:</span>
+                    {item.infoRequestDetails}
+                  </div>
+                )}
+
                 {/* Submitter & Click-to-call */}
                 <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-xs">
                   <span className="text-slate-300 font-medium">
@@ -554,6 +629,55 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                     "{item.approvalComments}"
                   </div>
                 )}
+
+                {/* Admin Actions (Mobile) */}
+                {isAdmin && (
+                  <div className="pt-2 flex flex-col gap-2 border-t border-slate-800">
+                    {item.status === 'Pending' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowRequestInfoModalPayment(item);
+                          setRequestInfoQuestions('');
+                        }}
+                        className="w-full py-2.5 px-3 min-h-[42px] bg-slate-800 hover:bg-slate-700 text-blue-300 font-semibold rounded-xl text-xs border border-slate-700 flex items-center justify-center transition-colors"
+                      >
+                        <HelpCircle className="w-4 h-4 mr-1.5" />
+                        Request Info / Clarification
+                      </button>
+                    )}
+
+                    {(item.status === 'Pending' || item.status === 'InfoRequested') && (
+                      item.userId === user?.userId ? (
+                        <div className="w-full py-2.5 px-3 min-h-[42px] bg-amber-500/10 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold flex items-center justify-center text-center">
+                          <ShieldCheck className="w-4 h-4 mr-1.5 text-amber-400" />
+                          Peer Approval Req (Self)
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowApproveModalPayment(item);
+                            setApproveSelectedCategory(item.categoryId || '');
+                            setApproveNewCategoryName('');
+                            setApproveComments('');
+                          }}
+                          className="w-full py-2.5 px-3 min-h-[42px] bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs shadow-md flex items-center justify-center transition-colors"
+                        >
+                          <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                          Approve & Categorize
+                        </button>
+                      )
+                    )}
+
+                    {(item.status === 'Approved' || (item.status as any) === 'Completed') && (
+                      <div className="w-full py-2 text-center text-xs text-emerald-400 font-bold flex items-center justify-center">
+                        <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                        Approved Claim
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))
           )}
@@ -571,18 +695,19 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                 <th className="py-3 px-4">Amount (₹)</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4">Approval Notes</th>
+                {isAdmin && <th className="py-3 px-4 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 text-slate-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="py-10 text-center text-slate-400">
+                  <td colSpan={isAdmin ? 8 : 7} className="py-10 text-center text-slate-400">
                     Loading site expenses...
                   </td>
                 </tr>
               ) : filteredExpenses.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-10 text-center text-slate-400">
+                  <td colSpan={isAdmin ? 8 : 7} className="py-10 text-center text-slate-400">
                     No expense records found for this site in the selected period.
                   </td>
                 </tr>
@@ -635,6 +760,11 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
 
                     <td className="py-3.5 px-4">
                       {getStatusBadge(item.status)}
+                      {item.infoRequestDetails && (
+                        <div className="text-[11px] text-blue-300 mt-1 max-w-xs">
+                          Query: {item.infoRequestDetails}
+                        </div>
+                      )}
                     </td>
 
                     <td className="py-3.5 px-4 text-[11px] text-slate-400 max-w-xs">
@@ -651,6 +781,56 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                         <span className="text-slate-500 italic">No notes</span>
                       )}
                     </td>
+
+                    {isAdmin && (
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap space-x-2">
+                        {item.status === 'Pending' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowRequestInfoModalPayment(item);
+                              setRequestInfoQuestions('');
+                            }}
+                            className="px-2.5 py-1.5 min-h-[36px] bg-slate-800 hover:bg-slate-700 text-blue-300 font-semibold rounded-lg text-xs border border-slate-700 shadow transition-colors inline-flex items-center"
+                            title="Request clarification from supervisor"
+                          >
+                            <HelpCircle className="w-3.5 h-3.5 mr-1 text-blue-400" />
+                            Request Info
+                          </button>
+                        )}
+                        {(item.status === 'Pending' || item.status === 'InfoRequested') && (
+                          item.userId === user?.userId ? (
+                            <span
+                              className="inline-flex items-center px-2.5 py-1.5 min-h-[36px] bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold"
+                              title="Peer review required: In our 4-admin system, you cannot self-approve your own payment request. Another Admin must approve it."
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5 mr-1 text-amber-400" />
+                              Peer Approval Req (Self)
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowApproveModalPayment(item);
+                                setApproveSelectedCategory(item.categoryId || '');
+                                setApproveNewCategoryName('');
+                                setApproveComments('');
+                              }}
+                              className="px-3 py-1.5 min-h-[36px] bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs shadow transition-colors inline-flex items-center"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                              Approve & Categorize
+                            </button>
+                          )
+                        )}
+                        {(item.status === 'Approved' || (item.status as any) === 'Completed') && (
+                          <span className="inline-flex items-center text-xs text-emerald-400 font-semibold">
+                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                            Approved
+                          </span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
@@ -661,23 +841,239 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
     </div>
   );
 
-  // If used as page view, render directly. If used as modal, render with backdrop.
-  if (isPageView) {
-    return content;
-  }
-
   return (
-    <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-      <div className="bg-slate-950 border border-slate-800 rounded-3xl w-full max-w-7xl shadow-2xl my-4 sm:my-8 max-h-[92vh] overflow-y-auto relative">
-        <button
-          onClick={handleBack}
-          className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 transition z-10"
-        >
-          <X className="w-5 h-5" />
-        </button>
-        {content}
-      </div>
-    </div>
+    <>
+      {isPageView ? (
+        content
+      ) : (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-slate-950 border border-slate-800 rounded-3xl w-full max-w-7xl shadow-2xl my-4 sm:my-8 max-h-[92vh] overflow-y-auto relative">
+            <button
+              onClick={handleBack}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 transition z-10"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            {content}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: APPROVE & DYNAMIC RE-CATEGORIZATION */}
+      {showApproveModalPayment && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-white">Approve & Categorize Expense</h3>
+                <p className="text-xs text-slate-400">
+                  {showApproveModalPayment.title} - ₹{(showApproveModalPayment.amount || 0).toLocaleString('en-IN')}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowApproveModalPayment(null)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                  Categorization Strategy
+                </label>
+                <div className="flex space-x-3 text-xs font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setApproveCategoryMode('existing')}
+                    className={`px-3 py-1.5 rounded-lg border transition ${
+                      approveCategoryMode === 'existing'
+                        ? 'border-amber-500 bg-amber-500/10 text-amber-300'
+                        : 'border-slate-700 text-slate-400'
+                    }`}
+                  >
+                    Select Existing Category
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setApproveCategoryMode('new')}
+                    className={`px-3 py-1.5 rounded-lg border transition ${
+                      approveCategoryMode === 'new'
+                        ? 'border-amber-500 bg-amber-500/10 text-amber-300'
+                        : 'border-slate-700 text-slate-400'
+                    }`}
+                  >
+                    Type New Category (Auto-Save)
+                  </button>
+                </div>
+              </div>
+
+              {approveCategoryMode === 'existing' ? (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                    Select Category
+                  </label>
+                  <select
+                    value={approveSelectedCategory}
+                    onChange={(e) => setApproveSelectedCategory(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-amber-500 min-h-[42px]"
+                  >
+                    <option value="">Keep current ({showApproveModalPayment.category})</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                    New Category Name (e.g. "Sariya - Grade Fe550")
+                  </label>
+                  <input
+                    type="text"
+                    value={approveNewCategoryName}
+                    onChange={(e) => setApproveNewCategoryName(e.target.value)}
+                    placeholder="Enter new category name..."
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-amber-500 min-h-[42px]"
+                  />
+                  <span className="text-[11px] text-slate-500 mt-0.5 block">
+                    Backend will automatically save this category to the database for future use.
+                  </span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                  Approval Comments / Verification Notes
+                </label>
+                <textarea
+                  rows={2}
+                  value={approveComments}
+                  onChange={(e) => setApproveComments(e.target.value)}
+                  placeholder="Verified quote with site engineer..."
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              {showApproveModalPayment.userId === user?.userId && (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-xs text-amber-300 flex items-start space-x-2">
+                  <ShieldCheck className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+                  <span>
+                    <strong>Peer Review Required:</strong> You initiated this payment claim. In our 4-admin setup, you cannot approve your own request; one of the other 3 Admins must review and approve it.
+                  </span>
+                </div>
+              )}
+
+              <div className="pt-2 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowApproveModalPayment(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={approveMutation.isPending || showApproveModalPayment.userId === user?.userId}
+                  onClick={() => {
+                    approveMutation.mutate({
+                      paymentId: showApproveModalPayment.id,
+                      dto: {
+                        version: showApproveModalPayment.version || 1,
+                        comments: approveComments || 'Approved by Admin in Site Ledger',
+                        overrideCategoryId:
+                          approveCategoryMode === 'existing' && approveSelectedCategory
+                            ? approveSelectedCategory
+                            : undefined,
+                        newCategoryName:
+                          approveCategoryMode === 'new' && approveNewCategoryName
+                            ? approveNewCategoryName
+                            : undefined,
+                      },
+                    });
+                  }}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs shadow transition-colors disabled:opacity-50 min-h-[42px] flex items-center"
+                >
+                  {approveMutation.isPending ? 'Processing...' : 'Confirm Approval'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADMIN REQUEST MORE DETAILS */}
+      {showRequestInfoModalPayment && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-white">Request Clarifications / Info</h3>
+                <p className="text-xs text-slate-400">
+                  Flags this payment as InfoRequested and records your questions in the audit trail
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRequestInfoModalPayment(null)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl text-xs space-y-1">
+              <span className="font-semibold text-white block">{showRequestInfoModalPayment.title}</span>
+              <span className="text-slate-400">
+                Amount: ₹{(showRequestInfoModalPayment.amount || 0).toLocaleString('en-IN')} | Submitter: {showRequestInfoModalPayment.submitterName} ({showRequestInfoModalPayment.submitterPhone || 'No Phone'})
+              </span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                Specific Questions / Details Required
+              </label>
+              <textarea
+                rows={3}
+                required
+                value={requestInfoQuestions}
+                onChange={(e) => setRequestInfoQuestions(e.target.value)}
+                placeholder="e.g. Please clarify labourer hours for bar-bending or attach weigh-bridge slip..."
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+
+            <div className="pt-2 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => setShowRequestInfoModalPayment(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={requestInfoMutation.isPending || !requestInfoQuestions.trim()}
+                onClick={() => {
+                  requestInfoMutation.mutate({
+                    paymentId: showRequestInfoModalPayment.id,
+                    version: showRequestInfoModalPayment.version || 1,
+                    questions: requestInfoQuestions.trim(),
+                  });
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs shadow transition-colors disabled:opacity-50 min-h-[42px] flex items-center"
+              >
+                {requestInfoMutation.isPending ? 'Submitting...' : 'Flag as InfoRequested'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

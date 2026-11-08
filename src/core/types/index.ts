@@ -253,6 +253,7 @@ export interface SiteExpenseItemDto {
   title: string;
   description: string;
   category: string;
+  categoryId?: string;
   amount: number;
   status: PaymentStatus;
   startDate: string;
@@ -266,6 +267,8 @@ export interface SiteExpenseItemDto {
   approvedAtUtc?: string;
   approvedByUserName?: string;
   approvalComments?: string;
+  infoRequestDetails?: string;
+  version?: number;
 }
 
 export interface PeriodAccessRequestDto {
