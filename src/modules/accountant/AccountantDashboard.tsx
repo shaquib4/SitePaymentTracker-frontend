@@ -187,6 +187,18 @@ export const AccountantDashboard: React.FC = () => {
     claimsCount: s.expenseClaimsCount,
   }));
 
+  if (viewingSiteProfitability) {
+    return (
+      <SiteExpensesModal
+        siteProfitability={viewingSiteProfitability}
+        isAdmin={false}
+        isPageView={true}
+        onBack={() => setViewingSiteProfitability(null)}
+        onClose={() => setViewingSiteProfitability(null)}
+      />
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Top Banner & Year Controls */}

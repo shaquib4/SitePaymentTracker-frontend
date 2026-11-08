@@ -416,6 +416,32 @@ export const AdminDashboard: React.FC = () => {
     );
   }
 
+  // If currently viewing a dedicated site expenses page, render that component
+  if (viewingSiteProfitability) {
+    return (
+      <SiteExpensesModal
+        siteProfitability={viewingSiteProfitability}
+        isAdmin={true}
+        isPageView={true}
+        onBack={() => setViewingSiteProfitability(null)}
+        onClose={() => setViewingSiteProfitability(null)}
+        onOpenSettleModal={(id) => {
+          const s = profitability.find((x) => x.siteId === id);
+          if (s) {
+            setViewingSiteProfitability(null);
+            setSettleSiteProfitability(s);
+            setSettleFinalPayment(s.finalPaymentReceived ? String(s.finalPaymentReceived) : '');
+            setSettleContractValue(s.contractValue ? String(s.contractValue) : '');
+          }
+        }}
+        onOpenMbModal={(id) => {
+          setViewingSiteProfitability(null);
+          setShowMbModalSiteId(id);
+        }}
+      />
+    );
+  }
+
   // Totals calculated from filtered payments list
   const totalApproved = (payments || [])
     .filter((p) => p.status === 'Approved' || (p.status as any) === 'Completed')
