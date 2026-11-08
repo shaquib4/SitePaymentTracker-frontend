@@ -17,6 +17,7 @@ interface AuthState {
   isAccountant: boolean;
   isSupervisor: boolean;
   isVendor: boolean;
+  isOfficeWorker: boolean;
 }
 
 interface AuthContextType extends AuthState {
@@ -64,6 +65,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isAccountant = user?.role === 'Accountant';
   const isSupervisor = user?.role === 'Supervisor';
   const isVendor = user?.role === 'Vendor';
+  const isOfficeWorker = user?.role === 'OfficeWorker';
 
   return (
     <AuthContext.Provider
@@ -75,6 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAccountant,
         isSupervisor,
         isVendor,
+        isOfficeWorker,
         login,
         logout,
       }}

@@ -1,6 +1,6 @@
 export type PaymentStatus = 'Pending' | 'InfoRequested' | 'Approved' | 'Rejected' | 'Completed';
 
-export type UserRole = 'Admin' | 'Accountant' | 'Supervisor' | 'Vendor';
+export type UserRole = 'Admin' | 'Accountant' | 'Supervisor' | 'Vendor' | 'OfficeWorker';
 
 export interface User {
   id: string;

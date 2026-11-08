@@ -118,7 +118,7 @@ export const AdminDashboard: React.FC = () => {
   const [newUserFullName, setNewUserFullName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPhone, setNewUserPhone] = useState('');
-  const [newUserRole, setNewUserRole] = useState<'Admin' | 'Accountant' | 'Supervisor'>('Supervisor');
+  const [newUserRole, setNewUserRole] = useState<'Admin' | 'Accountant' | 'Supervisor' | 'OfficeWorker'>('Supervisor');
   const [newUserDept, setNewUserDept] = useState('Site Operations');
 
   // Quick preset helper (User requirement: only Full Year & Last 30 Days, with custom calendar period pickers)
@@ -1785,8 +1785,20 @@ export const AdminDashboard: React.FC = () => {
                     </td>
 
                     <td className="py-3 px-4">
-                      <div className="text-xs font-medium text-slate-300">{u.role}</div>
-                      <div className="text-[11px] text-slate-500">{u.department}</div>
+                      <div className="flex items-center space-x-1.5">
+                        <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${
+                          u.role === 'OfficeWorker'
+                            ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
+                            : u.role === 'Supervisor'
+                            ? 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
+                            : u.role === 'Accountant'
+                            ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                            : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                        }`}>
+                          {u.role === 'OfficeWorker' ? 'Office Worker' : u.role}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">{u.department}</div>
                     </td>
 
                     <td className="py-3 px-4">
@@ -1980,12 +1992,21 @@ export const AdminDashboard: React.FC = () => {
                   <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Role</label>
                   <select
                     value={newUserRole}
-                    onChange={(e: any) => setNewUserRole(e.target.value)}
+                    onChange={(e: any) => {
+                      const role = e.target.value;
+                      setNewUserRole(role);
+                      if (role === 'OfficeWorker' && newUserDept === 'Site Operations') {
+                        setNewUserDept('Administration & Support');
+                      } else if (role === 'Accountant' && newUserDept === 'Site Operations') {
+                        setNewUserDept('Finance & Accounts');
+                      }
+                    }}
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                   >
-                    <option value="Supervisor">Supervisor</option>
-                    <option value="Accountant">Accountant</option>
-                    <option value="Admin">Admin</option>
+                    <option value="Supervisor">Supervisor (Site & Labour Operations)</option>
+                    <option value="OfficeWorker">Office Worker (Personal Claims & Historical Audit)</option>
+                    <option value="Accountant">Accountant (Financial Audit & Payouts)</option>
+                    <option value="Admin">Admin (Executive & Approvals)</option>
                   </select>
                 </div>
 

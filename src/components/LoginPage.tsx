@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../core/auth/AuthContext';
-import { Building2, Lock, Mail, ArrowRight, ShieldCheck, Calculator, HardHat, AlertCircle } from 'lucide-react';
+import { Building2, Lock, Mail, ArrowRight, ShieldCheck, Calculator, HardHat, AlertCircle, Briefcase } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
@@ -153,6 +153,25 @@ export const LoginPage: React.FC = () => {
                   <div>
                     <span className="font-semibold block">Surendra Kumar (Supervisor)</span>
                     <span className="text-[11px] text-slate-400">User ID: 616244 • Metro Project</span>
+                  </div>
+                </div>
+                <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400">Select</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleQuickSelect('400004')}
+                className={`p-2.5 rounded-lg border text-left text-xs transition-colors flex items-center justify-between ${
+                  email === '400004' || email === 'officeworker@khanenterprises.com'
+                    ? 'border-cyan-500 bg-cyan-950/40 text-cyan-300'
+                    : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-700/50'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  <Briefcase className="w-4 h-4 text-cyan-400" />
+                  <div>
+                    <span className="font-semibold block">Neha Sharma (Office Worker)</span>
+                    <span className="text-[11px] text-slate-400">User ID: 400004 • Personal Claims & Period Audit</span>
                   </div>
                 </div>
                 <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400">Select</span>

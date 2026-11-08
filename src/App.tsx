@@ -19,6 +19,9 @@ const SupervisorDashboard = lazy(() =>
 const VendorDashboard = lazy(() =>
   import('./modules/vendor/VendorDashboard').then((m) => ({ default: m.VendorDashboard }))
 );
+const OfficeWorkerDashboard = lazy(() =>
+  import('./modules/officeworker/OfficeWorkerDashboard').then((m) => ({ default: m.OfficeWorkerDashboard }))
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -92,7 +95,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 }
 
 const DashboardRouter: React.FC = () => {
-  const { isAuthenticated, user, isAdmin, isAccountant, isSupervisor } = useAuth();
+  const { isAuthenticated, user, isAdmin, isAccountant, isSupervisor, isOfficeWorker } = useAuth();
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
@@ -114,7 +117,8 @@ const DashboardRouter: React.FC = () => {
               {isAdmin && <AdminDashboard />}
               {isAccountant && <AccountantDashboard />}
               {isSupervisor && <SupervisorDashboard />}
-              {!isAdmin && !isAccountant && !isSupervisor && <VendorDashboard />}
+              {isOfficeWorker && <OfficeWorkerDashboard />}
+              {!isAdmin && !isAccountant && !isSupervisor && !isOfficeWorker && <VendorDashboard />}
             </Suspense>
           </main>
         </>

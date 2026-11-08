@@ -1,10 +1,10 @@
 import React from 'react';
 import { useAuth } from '../core/auth/AuthContext';
-import { Building2, LogOut, ShieldCheck, Calculator, HardHat, Store, User as UserIcon, Smartphone } from 'lucide-react';
+import { Building2, LogOut, ShieldCheck, Calculator, HardHat, Store, User as UserIcon, Smartphone, Briefcase } from 'lucide-react';
 import { usePwaInstall, InstallPwaModal } from './InstallPwaModal';
 
 export const Navbar: React.FC = () => {
-  const { user, logout, isAdmin, isAccountant, isSupervisor } = useAuth();
+  const { user, logout, isAdmin, isAccountant, isSupervisor, isOfficeWorker } = useAuth();
   const { isStandalone, showModal, setShowModal, triggerInstall } = usePwaInstall();
 
   if (!user) return null;
@@ -31,6 +31,14 @@ export const Navbar: React.FC = () => {
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30">
           <HardHat className="w-3.5 h-3.5 mr-1" />
           Supervisor
+        </span>
+      );
+    }
+    if (isOfficeWorker) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+          <Briefcase className="w-3.5 h-3.5 mr-1" />
+          Office Worker
         </span>
       );
     }
