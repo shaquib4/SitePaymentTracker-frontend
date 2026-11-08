@@ -50,6 +50,18 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
+  // Robust field normalization with full null/undefined safety
+  const siteId = siteProfitability?.siteId || (siteProfitability as any)?.id || '';
+  const siteName = siteProfitability?.siteName || (siteProfitability as any)?.name || 'Project Site';
+  const location = siteProfitability?.location || 'Location Not Specified';
+  const isSettled = Boolean(siteProfitability?.isSettled);
+  const settlementStatus = siteProfitability?.settlementStatus || (isSettled ? 'Finalized Settlement' : 'Ongoing');
+  const finalPaymentReceived = siteProfitability?.finalPaymentReceived != null ? Number(siteProfitability.finalPaymentReceived) : null;
+  const totalApprovedExpenses = Number(siteProfitability?.totalApprovedExpenses ?? 0);
+  const currentMargin = Number(siteProfitability?.currentMargin ?? (siteProfitability as any)?.profitMargin ?? 0);
+  const profitMarginPercentage = Number(siteProfitability?.profitMarginPercentage ?? (siteProfitability as any)?.marginPercentage ?? 0);
+  const mbTotalEstimatedValue = Number(siteProfitability?.mbTotalEstimatedValue ?? (siteProfitability as any)?.totalMbValue ?? 0);
+
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -72,10 +84,11 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
   const handleBack = onBack || onClose || (() => {});
 
   // Fetch all site expenses
-  const { data: expenses = [], isLoading } = useQuery<SiteExpenseItemDto[]>({
-    queryKey: ['site-expenses', siteProfitability.siteId, startDate, endDate, categoryFilter],
+  const { data: expenses = [], isLoading, isError, refetch } = useQuery<SiteExpenseItemDto[]>({
+    queryKey: ['site-expenses', siteId, startDate, endDate, categoryFilter],
     queryFn: async () => {
-      let url = `/sites/${siteProfitability.siteId}/expenses`;
+      if (!siteId) return [];
+      let url = `/sites/${siteId}/expenses`;
       const params = new URLSearchParams();
       if (startDate) params.append('startDate', startDate);
       if (endDate) params.append('endDate', endDate);
@@ -85,6 +98,7 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
       const res = await apiClient.get<SiteExpenseItemDto[]>(url);
       return res.data;
     },
+    enabled: Boolean(siteId),
   });
 
   // Fetch expense categories for categorization modal
@@ -193,13 +207,13 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
   // Period totals
   const totalPeriodApproved = filteredExpenses
     .filter((e) => e.status === 'Approved' || (e.status as any) === 'Completed')
-    .reduce((sum, e) => sum + e.amount, 0);
+    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
   const totalPeriodPending = filteredExpenses
     .filter((e) => e.status === 'Pending' || e.status === 'InfoRequested')
-    .reduce((sum, e) => sum + e.amount, 0);
+    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
-  const periodGrandTotal = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const periodGrandTotal = filteredExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
   // Extract distinct categories for this site
   const uniqueCategories = Array.from(new Set(expenses.map((e) => e.category).filter(Boolean)));
@@ -218,7 +232,7 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
   baseExpenses.forEach((e) => {
     const cat = e.category || 'General';
     const curr = categoryMap.get(cat) || { totalAmount: 0, count: 0 };
-    categoryMap.set(cat, { totalAmount: curr.totalAmount + e.amount, count: curr.count + 1 });
+    categoryMap.set(cat, { totalAmount: curr.totalAmount + (Number(e.amount) || 0), count: curr.count + 1 });
   });
 
   const categoryBreakdowns: CategoryBreakdown[] = Array.from(categoryMap.entries()).map(([category, val]) => ({
@@ -290,15 +304,15 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
           <div className="flex items-center space-x-2 self-start sm:self-auto">
             <button
               type="button"
-              onClick={() => onOpenSettleModal?.(siteProfitability.siteId)}
+              onClick={() => onOpenSettleModal?.(siteId)}
               className="inline-flex items-center px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20 transition active:scale-95"
             >
               <Coins className="w-4 h-4 mr-1.5" />
-              {siteProfitability.isSettled ? 'Update Settlement' : 'Record Final Payment'}
+              {isSettled ? 'Update Settlement' : 'Record Final Payment'}
             </button>
             <button
               type="button"
-              onClick={() => onOpenMbModal?.(siteProfitability.siteId)}
+              onClick={() => onOpenMbModal?.(siteId)}
               className="inline-flex items-center px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-xl text-xs font-semibold border border-slate-700 transition"
             >
               <FileSpreadsheet className="w-4 h-4 mr-1.5" />
@@ -318,20 +332,20 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                  {siteProfitability.siteName}
+                  {siteName}
                 </h1>
                 <span
                   className={`px-3 py-0.5 rounded-full text-xs font-bold border ${
-                    siteProfitability.isSettled
+                    isSettled
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                       : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                   }`}
                 >
-                  {siteProfitability.settlementStatus}
+                  {settlementStatus}
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                Project Location: <strong className="text-slate-200">{siteProfitability.location || 'Location Not Specified'}</strong>
+                Project Location: <strong className="text-slate-200">{location}</strong>
               </p>
             </div>
           </div>
@@ -342,8 +356,8 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
           <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
             <span className="text-[10px] text-slate-400 uppercase font-semibold block">Final Payment Received</span>
             <div className="text-lg sm:text-xl font-black text-emerald-400 font-mono mt-0.5">
-              {siteProfitability.finalPaymentReceived
-                ? `₹${siteProfitability.finalPaymentReceived.toLocaleString('en-IN')}`
+              {finalPaymentReceived != null
+                ? `₹${finalPaymentReceived.toLocaleString('en-IN')}`
                 : 'Pending'}
             </div>
           </div>
@@ -351,29 +365,29 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
           <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
             <span className="text-[10px] text-slate-400 uppercase font-semibold block">Total Site Expenses</span>
             <div className="text-lg sm:text-xl font-black text-rose-300 font-mono mt-0.5">
-              ₹{siteProfitability.totalApprovedExpenses.toLocaleString('en-IN')}
+              ₹{totalApprovedExpenses.toLocaleString('en-IN')}
             </div>
           </div>
 
           <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
             <span className="text-[10px] text-slate-400 uppercase font-semibold block">
-              {siteProfitability.isSettled ? 'Final Net Profit' : 'Estimated Margin'}
+              {isSettled ? 'Final Net Profit' : 'Estimated Margin'}
             </span>
             <div
               className={`text-lg sm:text-xl font-black font-mono mt-0.5 ${
-                siteProfitability.currentMargin >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                currentMargin >= 0 ? 'text-emerald-400' : 'text-rose-400'
               }`}
             >
-              ₹{siteProfitability.currentMargin.toLocaleString('en-IN')}{' '}
-              <span className="text-xs font-sans">({siteProfitability.profitMarginPercentage.toFixed(1)}%)</span>
+              ₹{currentMargin.toLocaleString('en-IN')}{' '}
+              <span className="text-xs font-sans">({profitMarginPercentage.toFixed(1)}%)</span>
             </div>
           </div>
 
           <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
             <span className="text-[10px] text-slate-400 uppercase font-semibold block">MB Valuation (Opt.)</span>
             <div className="text-lg sm:text-xl font-black text-white font-mono mt-0.5">
-              {siteProfitability.mbTotalEstimatedValue > 0
-                ? `₹${siteProfitability.mbTotalEstimatedValue.toLocaleString('en-IN')}`
+              {mbTotalEstimatedValue > 0
+                ? `₹${mbTotalEstimatedValue.toLocaleString('en-IN')}`
                 : 'No MB Uploaded'}
             </div>
           </div>
@@ -565,7 +579,7 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
               Itemized Site Expenses Ledger ({filteredExpenses.length} Records)
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Audit trail of all material, contractor and labour wage claims charged to {siteProfitability.siteName}
+              Audit trail of all material, contractor and labour wage claims charged to {siteName}
             </p>
           </div>
 
@@ -587,6 +601,17 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
           {isLoading ? (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-400">
               Loading site expenses...
+            </div>
+          ) : isError ? (
+            <div className="bg-slate-900 border border-rose-800/40 rounded-2xl p-8 text-center text-rose-300 space-y-2">
+              <p className="font-semibold text-sm">Failed to load site expenses.</p>
+              <button
+                type="button"
+                onClick={() => refetch()}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold"
+              >
+                Retry
+              </button>
             </div>
           ) : filteredExpenses.length === 0 ? (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-400">
@@ -613,7 +638,7 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                 {/* Amount & Title */}
                 <div>
                   <div className="text-2xl font-black font-mono text-white">
-                    ₹{item.amount.toLocaleString('en-IN')}
+                    ₹{(Number(item.amount) || 0).toLocaleString('en-IN')}
                   </div>
                   <div className="text-sm font-bold text-white mt-1 leading-snug">{item.title}</div>
                   {item.description && (
@@ -771,6 +796,19 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                     Loading site expenses...
                   </td>
                 </tr>
+              ) : isError ? (
+                <tr>
+                  <td colSpan={isAdmin ? 8 : 7} className="py-10 text-center text-rose-300">
+                    <p className="font-semibold text-sm">Failed to load site expenses.</p>
+                    <button
+                      type="button"
+                      onClick={() => refetch()}
+                      className="mt-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold"
+                    >
+                      Retry
+                    </button>
+                  </td>
+                </tr>
               ) : filteredExpenses.length === 0 ? (
                 <tr>
                   <td colSpan={isAdmin ? 8 : 7} className="py-10 text-center text-slate-400">
@@ -816,12 +854,12 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                     <td className="py-3.5 px-4 font-mono text-[11px] text-slate-300">
                       <div>{item.startDate} → {item.endDate}</div>
                       <div className="text-[10px] text-slate-500">
-                        Req: {new Date(item.createdAtUtc).toLocaleDateString('en-IN')}
+                        Req: {item.createdAtUtc ? new Date(item.createdAtUtc).toLocaleDateString('en-IN') : 'N/A'}
                       </div>
                     </td>
 
                     <td className="py-3.5 px-4 font-mono font-bold text-white text-sm">
-                      ₹{item.amount.toLocaleString('en-IN')}
+                      ₹{(Number(item.amount) || 0).toLocaleString('en-IN')}
                     </td>
 
                     <td className="py-3.5 px-4">

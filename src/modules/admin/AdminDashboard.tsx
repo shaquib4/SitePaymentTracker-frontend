@@ -414,43 +414,6 @@ export const AdminDashboard: React.FC = () => {
     },
   });
 
-  // If currently viewing a dedicated employee detail page, render that component
-  if (viewingEmployeeId) {
-    return (
-      <EmployeeExpensesView
-        userId={viewingEmployeeId}
-        onBack={() => setViewingEmployeeId(null)}
-        year={selectedYear}
-      />
-    );
-  }
-
-  // If currently viewing a dedicated site expenses page, render that component
-  if (viewingSiteProfitability) {
-    return (
-      <SiteExpensesModal
-        siteProfitability={viewingSiteProfitability}
-        isAdmin={true}
-        isPageView={true}
-        onBack={() => setViewingSiteProfitability(null)}
-        onClose={() => setViewingSiteProfitability(null)}
-        onOpenSettleModal={(id) => {
-          const s = profitability.find((x) => x.siteId === id);
-          if (s) {
-            setViewingSiteProfitability(null);
-            setSettleSiteProfitability(s);
-            setSettleFinalPayment(s.finalPaymentReceived ? String(s.finalPaymentReceived) : '');
-            setSettleContractValue(s.contractValue ? String(s.contractValue) : '');
-          }
-        }}
-        onOpenMbModal={(id) => {
-          setViewingSiteProfitability(null);
-          setShowMbModalSiteId(id);
-        }}
-      />
-    );
-  }
-
   // Totals calculated from filtered payments list
   const totalApproved = (payments || [])
     .filter((p) => p.status === 'Approved' || (p.status as any) === 'Completed')
@@ -516,6 +479,43 @@ export const AdminDashboard: React.FC = () => {
     setCopiedCreds(true);
     setTimeout(() => setCopiedCreds(false), 3000);
   };
+
+  // If currently viewing a dedicated employee detail page, render that component
+  if (viewingEmployeeId) {
+    return (
+      <EmployeeExpensesView
+        userId={viewingEmployeeId}
+        onBack={() => setViewingEmployeeId(null)}
+        year={selectedYear}
+      />
+    );
+  }
+
+  // If currently viewing a dedicated site expenses page, render that component
+  if (viewingSiteProfitability) {
+    return (
+      <SiteExpensesModal
+        siteProfitability={viewingSiteProfitability}
+        isAdmin={true}
+        isPageView={true}
+        onBack={() => setViewingSiteProfitability(null)}
+        onClose={() => setViewingSiteProfitability(null)}
+        onOpenSettleModal={(id) => {
+          const s = profitability.find((x) => x.siteId === id);
+          if (s) {
+            setViewingSiteProfitability(null);
+            setSettleSiteProfitability(s);
+            setSettleFinalPayment(s.finalPaymentReceived ? String(s.finalPaymentReceived) : '');
+            setSettleContractValue(s.contractValue ? String(s.contractValue) : '');
+          }
+        }}
+        onOpenMbModal={(id) => {
+          setViewingSiteProfitability(null);
+          setShowMbModalSiteId(id);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-6 sm:space-y-8 overflow-x-hidden">
@@ -2932,24 +2932,6 @@ export const AdminDashboard: React.FC = () => {
         <LabourerAuditModal
           labourerId={auditLabourerId}
           onClose={() => setAuditLabourerId(null)}
-        />
-      )}
-
-      {/* MODAL: SITE EXPENSES AUDIT & LEDGER */}
-      {viewingSiteProfitability && (
-        <SiteExpensesModal
-          siteProfitability={viewingSiteProfitability}
-          isAdmin={true}
-          onClose={() => setViewingSiteProfitability(null)}
-          onOpenSettleModal={(id) => {
-            const s = profitability.find((x) => x.siteId === id);
-            if (s) {
-              setSettleSiteProfitability(s);
-              setSettleFinalPayment(s.finalPaymentReceived ? String(s.finalPaymentReceived) : '');
-              setSettleContractValue(s.contractValue ? String(s.contractValue) : '');
-            }
-          }}
-          onOpenMbModal={(id) => setShowMbModalSiteId(id)}
         />
       )}
 
