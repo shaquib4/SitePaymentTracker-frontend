@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../core/api/client';
 import {
   PaymentRequest,
   RequestInfoPaymentDto,
-  FinanceMetricsDto,
   SiteProfitabilityDto,
-  ExpenseCategory
+  ExpenseCategory,
+  CategoryBreakdown
 } from '../../core/types';
 import { ExpensePieChart } from '../../components/ExpensePieChart';
 import { SitePieChart } from '../../components/SitePieChart';
@@ -90,17 +90,6 @@ export const AccountantDashboard: React.FC = () => {
     },
   });
 
-  const { data: dashboardStats } = useQuery<FinanceMetricsDto>({
-    queryKey: ['accountant-dashboard-stats', selectedYear, startDate, endDate],
-    queryFn: async () => {
-      let url = `/payments/dashboard-stats?year=${selectedYear}`;
-      if (startDate) url += `&startDate=${startDate}`;
-      if (endDate) url += `&endDate=${endDate}`;
-      const res = await apiClient.get<FinanceMetricsDto>(url);
-      return res.data;
-    },
-  });
-
   const { data: profitability = [] } = useQuery<SiteProfitabilityDto[]>({
     queryKey: ['accountant-sites-profitability', startDate, endDate],
     queryFn: async () => {
@@ -179,6 +168,36 @@ export const AccountantDashboard: React.FC = () => {
     .reduce((sum, p) => sum + p.amount, 0);
 
   const totalPeriodGrand = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
+
+  // Dynamically calculate Category Breakdowns according to active statusFilter:
+  // e.g. Pending shows only Pending, Approved shows only Approved, Completed shows only Completed.
+  const pieCategoryBreakdowns: CategoryBreakdown[] = useMemo(() => {
+    let target = filteredPayments;
+    if (statusFilter) {
+      target = filteredPayments.filter((p) => p.status === statusFilter);
+    } else {
+      const approvedOrCompleted = filteredPayments.filter(
+        (p) => p.status === 'Approved' || (p.status as any) === 'Completed'
+      );
+      target = approvedOrCompleted.length > 0 ? approvedOrCompleted : filteredPayments;
+    }
+
+    const map = new Map<string, { totalAmount: number; count: number }>();
+    target.forEach((p) => {
+      const cat = p.category || 'General';
+      const curr = map.get(cat) || { totalAmount: 0, count: 0 };
+      map.set(cat, {
+        totalAmount: curr.totalAmount + (p.amount || 0),
+        count: curr.count + 1,
+      });
+    });
+
+    return Array.from(map.entries()).map(([category, val]) => ({
+      category,
+      totalAmount: val.totalAmount,
+      count: val.count,
+    }));
+  }, [filteredPayments, statusFilter]);
 
   const siteBreakdowns = (profitability || []).map((s) => ({
     siteId: s.siteId,
@@ -433,11 +452,30 @@ export const AccountantDashboard: React.FC = () => {
 
       {/* PIE CHARTS: CATEGORY BREAKDOWN & SITE DISTRIBUTION */}
       <div className="grid grid-cols-1 gap-8">
-        <ExpensePieChart
-          categoryBreakdowns={dashboardStats?.categoryBreakdowns || []}
-          onSelectCategory={(cat) => setSelectedCategoryFilter(cat)}
-          selectedCategory={selectedCategoryFilter}
-        />
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="text-base font-bold text-white tracking-tight">
+                Expense Category Distribution {statusFilter ? `(${statusFilter} Only)` : '(Approved & Disbursed)'}
+              </h3>
+              <p className="text-xs text-slate-400">
+                {statusFilter
+                  ? `Breakdown of ${statusFilter.toLowerCase()} expenditures. Click any category slice to filter ledger records.`
+                  : 'Breakdown of cleared & approved expenditures. Click any category slice to filter ledger records.'}
+              </p>
+            </div>
+            {statusFilter && (
+              <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                Filter: {statusFilter}
+              </span>
+            )}
+          </div>
+          <ExpensePieChart
+            categoryBreakdowns={pieCategoryBreakdowns}
+            onSelectCategory={(cat) => setSelectedCategoryFilter(cat)}
+            selectedCategory={selectedCategoryFilter}
+          />
+        </div>
 
         <SitePieChart
           siteBreakdowns={siteBreakdowns}
@@ -467,9 +505,10 @@ export const AccountantDashboard: React.FC = () => {
               className="bg-slate-900 border border-slate-800 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
               <option value="">All Statuses</option>
+              <option value="Approved">Approved</option>
+              <option value="Completed">Completed / Disbursed</option>
               <option value="Pending">Pending</option>
               <option value="InfoRequested">Info Requested</option>
-              <option value="Approved">Approved</option>
               <option value="Rejected">Rejected</option>
             </select>
           </div>
@@ -528,7 +567,9 @@ export const AccountantDashboard: React.FC = () => {
                   </div>
                   <span
                     className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold flex-shrink-0 ${
-                      p.status === 'Approved'
+                      p.status === 'Completed'
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                        : p.status === 'Approved'
                         ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                         : p.status === 'Pending'
                         ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
@@ -610,6 +651,12 @@ export const AccountantDashboard: React.FC = () => {
                     <div className="w-full py-2 text-center text-xs text-emerald-400 font-bold flex items-center justify-center">
                       <CheckCircle2 className="w-4 h-4 mr-1.5" />
                       Verified & Approved
+                    </div>
+                  )}
+                  {p.status === 'Completed' && (
+                    <div className="w-full py-2 text-center text-xs text-cyan-400 font-bold flex items-center justify-center">
+                      <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                      Completed & Disbursed
                     </div>
                   )}
                 </div>
@@ -697,7 +744,9 @@ export const AccountantDashboard: React.FC = () => {
                     <td className="py-3 px-4">
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          p.status === 'Approved'
+                          p.status === 'Completed'
+                            ? 'bg-cyan-500/20 text-cyan-300'
+                            : p.status === 'Approved'
                             ? 'bg-emerald-500/20 text-emerald-300'
                             : p.status === 'Pending'
                             ? 'bg-amber-500/20 text-amber-300'
@@ -733,6 +782,9 @@ export const AccountantDashboard: React.FC = () => {
                       )}
                       {p.status === 'Approved' && (
                         <span className="text-xs text-emerald-400 font-medium">Verified & Approved</span>
+                      )}
+                      {p.status === 'Completed' && (
+                        <span className="text-xs text-cyan-400 font-medium">Completed & Disbursed</span>
                       )}
                     </td>
                   </tr>

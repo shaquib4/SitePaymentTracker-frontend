@@ -66,6 +66,9 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
   const [showRequestInfoModalPayment, setShowRequestInfoModalPayment] = useState<SiteExpenseItemDto | null>(null);
   const [requestInfoQuestions, setRequestInfoQuestions] = useState('');
 
+  const [showCompleteModalPayment, setShowCompleteModalPayment] = useState<SiteExpenseItemDto | null>(null);
+  const [completeComments, setCompleteComments] = useState('');
+
   const handleBack = onBack || onClose || (() => {});
 
   // Fetch all site expenses
@@ -129,6 +132,25 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
     },
   });
 
+  // Mark Completed / Disbursed Mutation (Admin Only)
+  const markPaidMutation = useMutation({
+    mutationFn: async ({ paymentId, version, comments }: { paymentId: string; version: number; comments?: string }) => {
+      const res = await apiClient.post(`/payments/${paymentId}/mark-paid`, {
+        version,
+        comments,
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['site-expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['sites-profitability'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      setShowCompleteModalPayment(null);
+      setCompleteComments('');
+    },
+  });
+
   // Quick preset helper
   const setPreset = (preset: 'all' | 'last_30_days') => {
     const today = new Date();
@@ -182,15 +204,22 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
   // Extract distinct categories for this site
   const uniqueCategories = Array.from(new Set(expenses.map((e) => e.category).filter(Boolean)));
 
-  // Calculate category breakdown for ExpensePieChart
+  // Calculate category breakdown for ExpensePieChart according to active statusFilter
+  // e.g. Pending shows only Pending, Approved shows only Approved, Completed shows only Completed.
   const categoryMap = new Map<string, { totalAmount: number; count: number }>();
-  filteredExpenses
-    .filter((e) => e.status === 'Approved' || (e.status as any) === 'Completed')
-    .forEach((e) => {
-      const cat = e.category || 'General';
-      const curr = categoryMap.get(cat) || { totalAmount: 0, count: 0 };
-      categoryMap.set(cat, { totalAmount: curr.totalAmount + e.amount, count: curr.count + 1 });
-    });
+  const pieTargetExpenses = statusFilter
+    ? filteredExpenses.filter((e) => e.status === statusFilter)
+    : filteredExpenses.filter((e) => e.status === 'Approved' || (e.status as any) === 'Completed');
+
+  const baseExpenses = (!statusFilter && pieTargetExpenses.length === 0)
+    ? filteredExpenses
+    : pieTargetExpenses;
+
+  baseExpenses.forEach((e) => {
+    const cat = e.category || 'General';
+    const curr = categoryMap.get(cat) || { totalAmount: 0, count: 0 };
+    categoryMap.set(cat, { totalAmount: curr.totalAmount + e.amount, count: curr.count + 1 });
+  });
 
   const categoryBreakdowns: CategoryBreakdown[] = Array.from(categoryMap.entries()).map(([category, val]) => ({
     category,
@@ -200,8 +229,14 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'Approved':
       case 'Completed':
+        return (
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+            <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-cyan-400" />
+            Completed
+          </span>
+        );
+      case 'Approved':
         return (
           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
             <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-400" />
@@ -446,6 +481,7 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
             >
               <option value="">All Statuses</option>
               <option value="Approved">Approved</option>
+              <option value="Completed">Completed / Disbursed</option>
               <option value="Pending">Pending Review</option>
               <option value="InfoRequested">Info Requested</option>
               <option value="Rejected">Rejected</option>
@@ -469,13 +505,13 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
 
           <div className="bg-slate-950/70 p-4 rounded-2xl border border-slate-800">
             <span className="text-xs font-semibold text-emerald-400 uppercase block">
-              Period Approved
+              Period Approved & Disbursed
             </span>
             <div className="text-2xl font-black text-emerald-400 font-mono mt-1">
               ₹{totalPeriodApproved.toLocaleString('en-IN')}
             </div>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              Cleared & Approved
+              Cleared, Approved & Completed
             </p>
           </div>
 
@@ -496,12 +532,23 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
       {/* EXPENSE CATEGORY DISTRIBUTION PIE CHART */}
       {categoryBreakdowns.length > 0 && (
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-3">
-          <h3 className="text-base font-bold text-white tracking-tight">
-            Site Expense Category Distribution
-          </h3>
-          <p className="text-xs text-slate-400">
-            Breakdown of approved project expenses by material, labour wages, equipment rental, and logistics
-          </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="text-base font-bold text-white tracking-tight">
+                Site Expense Category Distribution {statusFilter ? `(${statusFilter} Only)` : '(Approved & Disbursed)'}
+              </h3>
+              <p className="text-xs text-slate-400">
+                {statusFilter
+                  ? `Breakdown of ${statusFilter.toLowerCase()} project expenses by material, labour wages, equipment rental, and logistics`
+                  : 'Breakdown of cleared project expenses by material, labour wages, equipment rental, and logistics'}
+              </p>
+            </div>
+            {statusFilter && (
+              <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                Status: {statusFilter}
+              </span>
+            )}
+          </div>
           <ExpensePieChart
             categoryBreakdowns={categoryBreakdowns}
             onSelectCategory={(cat) => setCategoryFilter(cat || '')}
@@ -670,10 +717,29 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                       )
                     )}
 
-                    {(item.status === 'Approved' || (item.status as any) === 'Completed') && (
-                      <div className="w-full py-2 text-center text-xs text-emerald-400 font-bold flex items-center justify-center">
+                    {item.status === 'Approved' && (
+                      <div className="flex flex-col gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowCompleteModalPayment(item);
+                            setCompleteComments('');
+                          }}
+                          className="w-full py-2.5 px-3 min-h-[42px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow-md flex items-center justify-center transition-colors"
+                        >
+                          <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                          Mark Complete / Disbursed
+                        </button>
+                        <div className="w-full text-center text-[11px] text-emerald-400 font-medium">
+                          Approved • Awaiting Final Payout
+                        </div>
+                      </div>
+                    )}
+
+                    {item.status === 'Completed' && (
+                      <div className="w-full py-2 text-center text-xs text-cyan-400 font-bold flex items-center justify-center">
                         <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                        Approved Claim
+                        Completed & Disbursed
                       </div>
                     )}
                   </div>
@@ -823,10 +889,27 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                             </button>
                           )
                         )}
-                        {(item.status === 'Approved' || (item.status as any) === 'Completed') && (
-                          <span className="inline-flex items-center text-xs text-emerald-400 font-semibold">
+                        {item.status === 'Approved' && (
+                          <div className="inline-flex items-center space-x-2">
+                            <span className="text-xs text-emerald-400 font-medium">Approved</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowCompleteModalPayment(item);
+                                setCompleteComments('');
+                              }}
+                              className="px-3 py-1.5 min-h-[36px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs shadow transition-colors inline-flex items-center"
+                              title="Confirm payment disbursement and mark completed"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                              Mark Complete
+                            </button>
+                          </div>
+                        )}
+                        {item.status === 'Completed' && (
+                          <span className="inline-flex items-center text-xs text-cyan-400 font-semibold">
                             <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                            Approved
+                            Completed
                           </span>
                         )}
                       </td>
@@ -1068,6 +1151,79 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs shadow transition-colors disabled:opacity-50 min-h-[42px] flex items-center"
               >
                 {requestInfoMutation.isPending ? 'Submitting...' : 'Flag as InfoRequested'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADMIN MARK COMPLETE & DISBURSE */}
+      {showCompleteModalPayment && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-white">Confirm Payment Disbursement</h3>
+                <p className="text-xs text-slate-400">
+                  Mark this approved expense as Completed & Disbursed
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCompleteModalPayment(null)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-xs space-y-1.5">
+              <div className="flex justify-between items-center">
+                <span className="font-bold text-white text-sm">{showCompleteModalPayment.title}</span>
+                <span className="text-emerald-400 font-mono font-bold text-base">
+                  ₹{(showCompleteModalPayment.amount || 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="text-slate-400 flex justify-between">
+                <span>Category: <strong className="text-slate-200">{showCompleteModalPayment.category}</strong></span>
+                <span>Claimant: <strong className="text-slate-200">{showCompleteModalPayment.submitterName}</strong></span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                Disbursement Notes / Transaction Ref (Optional)
+              </label>
+              <textarea
+                rows={2}
+                value={completeComments}
+                onChange={(e) => setCompleteComments(e.target.value)}
+                placeholder="e.g. Paid via NEFT Ref #99281, Cash voucher signed..."
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            <div className="pt-2 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => setShowCompleteModalPayment(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={markPaidMutation.isPending}
+                onClick={() => {
+                  markPaidMutation.mutate({
+                    paymentId: showCompleteModalPayment.id,
+                    version: showCompleteModalPayment.version || 1,
+                    comments: completeComments || 'Payment disbursed & completed by Admin',
+                  });
+                }}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow transition-colors disabled:opacity-50 min-h-[42px] flex items-center"
+              >
+                {markPaidMutation.isPending ? 'Processing...' : 'Confirm Completed'}
               </button>
             </div>
           </div>

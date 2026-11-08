@@ -128,8 +128,14 @@ export const OfficeWorkerDashboard: React.FC = () => {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'Approved':
       case 'Completed':
+        return (
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+            <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-cyan-400" />
+            Completed
+          </span>
+        );
+      case 'Approved':
         return (
           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
             <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-400" />

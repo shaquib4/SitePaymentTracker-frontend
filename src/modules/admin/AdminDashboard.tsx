@@ -12,7 +12,7 @@ import {
   GenerateUserRequest,
   GenerateUserResponse,
   ApprovePaymentDto,
-  FinanceMetricsDto
+  CategoryBreakdown
 } from '../../core/types';
 import { ExpensePieChart } from '../../components/ExpensePieChart';
 import { SitePieChart } from '../../components/SitePieChart';
@@ -80,6 +80,9 @@ export const AdminDashboard: React.FC = () => {
   const [showRequestInfoModalPayment, setShowRequestInfoModalPayment] = useState<PaymentRequest | null>(null);
   const [requestInfoQuestions, setRequestInfoQuestions] = useState('');
 
+  const [showCompleteModalPayment, setShowCompleteModalPayment] = useState<PaymentRequest | null>(null);
+  const [completeComments, setCompleteComments] = useState('');
+
   const [showCreateSiteModal, setShowCreateSiteModal] = useState(false);
   const [newSiteName, setNewSiteName] = useState('');
   const [newSiteLocation, setNewSiteLocation] = useState('');
@@ -137,26 +140,14 @@ export const AdminDashboard: React.FC = () => {
 
   // Queries
   const { data: payments = [], isLoading: paymentsLoading } = useQuery<PaymentRequest[]>({
-    queryKey: ['payments', selectedYear, statusFilter, startDate, endDate, selectedCategoryFilter, selectedSiteFilter],
+    queryKey: ['payments', selectedYear, statusFilter, startDate, endDate, selectedSiteFilter],
     queryFn: async () => {
       let url = `/payments?year=${selectedYear}`;
       if (statusFilter) url += `&status=${statusFilter}`;
       if (startDate) url += `&startDate=${startDate}`;
       if (endDate) url += `&endDate=${endDate}`;
-      if (selectedCategoryFilter) url += `&category=${encodeURIComponent(selectedCategoryFilter)}`;
       if (selectedSiteFilter) url += `&siteId=${selectedSiteFilter}`;
       const res = await apiClient.get<PaymentRequest[]>(url);
-      return res.data;
-    },
-  });
-
-  const { data: dashboardStats } = useQuery<FinanceMetricsDto>({
-    queryKey: ['dashboard-stats', selectedYear, startDate, endDate],
-    queryFn: async () => {
-      let url = `/payments/dashboard-stats?year=${selectedYear}`;
-      if (startDate) url += `&startDate=${startDate}`;
-      if (endDate) url += `&endDate=${endDate}`;
-      const res = await apiClient.get<FinanceMetricsDto>(url);
       return res.data;
     },
   });
@@ -283,6 +274,24 @@ export const AdminDashboard: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       setShowRequestInfoModalPayment(null);
       setRequestInfoQuestions('');
+    },
+  });
+
+  const markPaidMutation = useMutation({
+    mutationFn: async ({ paymentId, version, comments }: { paymentId: string; version: number; comments?: string }) => {
+      const res = await apiClient.post<PaymentRequest>(`/payments/${paymentId}/mark-paid`, {
+        version,
+        comments,
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['sites-profitability'] });
+      queryClient.invalidateQueries({ queryKey: ['site-expenses'] });
+      setShowCompleteModalPayment(null);
+      setCompleteComments('');
     },
   });
 
@@ -458,6 +467,7 @@ export const AdminDashboard: React.FC = () => {
   const periodGrandTotal = (payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
 
   const filteredPayments = (payments || []).filter((p) => {
+    if (selectedCategoryFilter && p.category !== selectedCategoryFilter) return false;
     if (!searchFilter) return true;
     const q = searchFilter.toLowerCase();
     return (
@@ -467,6 +477,36 @@ export const AdminDashboard: React.FC = () => {
       (p.submitterPhone && p.submitterPhone.includes(q))
     );
   });
+
+  // Dynamically calculate Category Breakdowns according to active statusFilter:
+  // e.g. Pending shows only Pending, Approved shows only Approved, Completed shows only Completed.
+  const pieCategoryBreakdowns: CategoryBreakdown[] = useMemo(() => {
+    let target = payments;
+    if (statusFilter) {
+      target = payments.filter((p) => p.status === statusFilter);
+    } else {
+      const approvedOrCompleted = payments.filter(
+        (p) => p.status === 'Approved' || (p.status as any) === 'Completed'
+      );
+      target = approvedOrCompleted.length > 0 ? approvedOrCompleted : payments;
+    }
+
+    const map = new Map<string, { totalAmount: number; count: number }>();
+    target.forEach((p) => {
+      const cat = p.category || 'General';
+      const curr = map.get(cat) || { totalAmount: 0, count: 0 };
+      map.set(cat, {
+        totalAmount: curr.totalAmount + (p.amount || 0),
+        count: curr.count + 1,
+      });
+    });
+
+    return Array.from(map.entries()).map(([category, val]) => ({
+      category,
+      totalAmount: val.totalAmount,
+      count: val.count,
+    }));
+  }, [payments, statusFilter]);
 
   const handleCopyCredentials = () => {
     if (!generatedUserCreds) return;
@@ -697,11 +737,30 @@ export const AdminDashboard: React.FC = () => {
       </div>
 
       {/* INTERACTIVE EXPENSE PIE CHART */}
-      <ExpensePieChart
-        categoryBreakdowns={dashboardStats?.categoryBreakdowns || []}
-        onSelectCategory={(cat) => setSelectedCategoryFilter(cat)}
-        selectedCategory={selectedCategoryFilter}
-      />
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="text-base font-bold text-white tracking-tight">
+              Expense Category Distribution {statusFilter ? `(${statusFilter} Only)` : '(Approved & Disbursed)'}
+            </h3>
+            <p className="text-xs text-slate-400">
+              {statusFilter
+                ? `Breakdown of ${statusFilter.toLowerCase()} expenditures. Click any category slice to filter ledger records.`
+                : 'Breakdown of cleared & approved expenditures. Click any category slice to filter ledger records.'}
+            </p>
+          </div>
+          {statusFilter && (
+            <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              Filter: {statusFilter}
+            </span>
+          )}
+        </div>
+        <ExpensePieChart
+          categoryBreakdowns={pieCategoryBreakdowns}
+          onSelectCategory={(cat) => setSelectedCategoryFilter(cat)}
+          selectedCategory={selectedCategoryFilter}
+        />
+      </div>
 
       {/* Navigation Tabs with Smooth Horizontal Scroll on Mobile */}
       <div className="border-b border-slate-800 -mx-3 sm:mx-0 px-3 sm:px-0">
@@ -946,9 +1005,28 @@ export const AdminDashboard: React.FC = () => {
                       )}
 
                       {p.status === 'Approved' && (
-                        <div className="w-full py-2 text-center text-xs text-emerald-400 font-bold flex items-center justify-center">
+                        <div className="flex flex-col gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowCompleteModalPayment(p);
+                              setCompleteComments('');
+                            }}
+                            className="w-full py-2.5 px-3 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow-md flex items-center justify-center transition-colors"
+                          >
+                            <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                            Mark Complete / Disbursed
+                          </button>
+                          <div className="w-full text-center text-[11px] text-emerald-400 font-medium">
+                            Approved (v{p.version}) • Awaiting Disbursement
+                          </div>
+                        </div>
+                      )}
+
+                      {p.status === 'Completed' && (
+                        <div className="w-full py-2 text-center text-xs text-cyan-400 font-bold flex items-center justify-center">
                           <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                          Approved (Version {p.version})
+                          Completed & Disbursed
                         </div>
                       )}
                     </div>
@@ -1136,7 +1214,27 @@ export const AdminDashboard: React.FC = () => {
                             )
                           )}
                           {p.status === 'Approved' && (
-                            <span className="text-xs text-emerald-400 font-medium">Approved (v{p.version})</span>
+                            <div className="inline-flex items-center space-x-2">
+                              <span className="text-xs text-emerald-400 font-medium">Approved (v{p.version})</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowCompleteModalPayment(p);
+                                  setCompleteComments('');
+                                }}
+                                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs shadow transition-colors inline-flex items-center"
+                                title="Confirm payment disbursement and mark completed"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                                Mark Complete
+                              </button>
+                            </div>
+                          )}
+                          {p.status === 'Completed' && (
+                            <span className="inline-flex items-center text-xs text-cyan-400 font-semibold">
+                              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                              Completed
+                            </span>
                           )}
                         </td>
                       </tr>
@@ -2337,6 +2435,79 @@ export const AdminDashboard: React.FC = () => {
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-sm shadow transition-colors disabled:opacity-50"
               >
                 {requestInfoMutation.isPending ? 'Submitting...' : 'Flag as InfoRequested'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADMIN MARK COMPLETE & DISBURSE */}
+      {showCompleteModalPayment && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-white">Confirm Payment Disbursement</h3>
+                <p className="text-xs text-slate-400">
+                  Mark this approved expense as Completed & Disbursed
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCompleteModalPayment(null)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-xs space-y-1.5">
+              <div className="flex justify-between items-center">
+                <span className="font-bold text-white text-sm">{showCompleteModalPayment.title}</span>
+                <span className="text-emerald-400 font-mono font-bold text-base">
+                  ₹{(showCompleteModalPayment.amount || 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="text-slate-400 flex justify-between">
+                <span>Category: <strong className="text-slate-200">{showCompleteModalPayment.category}</strong></span>
+                <span>Claimant: <strong className="text-slate-200">{showCompleteModalPayment.submitterName}</strong></span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                Disbursement Notes / Transaction Ref (Optional)
+              </label>
+              <textarea
+                rows={2}
+                value={completeComments}
+                onChange={(e) => setCompleteComments(e.target.value)}
+                placeholder="e.g. Paid via NEFT Ref #99281, Cash voucher signed..."
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            <div className="pt-2 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => setShowCompleteModalPayment(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={markPaidMutation.isPending}
+                onClick={() => {
+                  markPaidMutation.mutate({
+                    paymentId: showCompleteModalPayment.id,
+                    version: showCompleteModalPayment.version,
+                    comments: completeComments || 'Payment disbursed & completed by Admin',
+                  });
+                }}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow transition-colors disabled:opacity-50 min-h-[42px] flex items-center"
+              >
+                {markPaidMutation.isPending ? 'Processing...' : 'Confirm Completed'}
               </button>
             </div>
           </div>
