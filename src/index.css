@@ -14,20 +14,25 @@
     box-sizing: border-box !important;
   }
 
-  /* Fix for iOS Safari date inputs overflowing container */
+  /* Fix for iOS Safari date inputs overflowing container and collapsing height */
   input[type="date"] {
     -webkit-appearance: none;
     appearance: none;
     min-width: 0 !important;
     max-width: 100% !important;
     width: 100% !important;
+    min-height: 42px !important;
+    height: 42px !important;
     box-sizing: border-box !important;
     color-scheme: dark;
+    display: flex;
+    align-items: center;
   }
 
   /* Align date text properly on iOS Safari */
   input[type="date"]::-webkit-date-and-time-value {
     text-align: left;
+    min-height: 1.5em;
   }
 }
 
