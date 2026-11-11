@@ -114,11 +114,14 @@ export const AdminDashboard: React.FC = () => {
   const [recipientEmailOverride, setRecipientEmailOverride] = useState('');
   const {
     auditFiles,
+    emailStatus,
     isLoading: auditFilesLoading,
     refetch: refetchAuditFiles,
     activeJobsCount,
     isQueueing: isQueueingAuditPack,
     queueAuditPack,
+    regeneratingId,
+    regenerateAuditPack,
     deleteAuditFile,
     downloadingKey,
     downloadAuditFile,
@@ -2270,11 +2273,14 @@ export const AdminDashboard: React.FC = () => {
       {activeTab === 'audit_files' && isAdminUser && (
         <AuditFilesPanel
           auditFiles={auditFiles}
+          emailStatus={emailStatus}
           isLoading={auditFilesLoading}
           onRefresh={() => refetchAuditFiles()}
           onDownload={downloadAuditFile}
+          onRegenerate={(id) => regenerateAuditPack(id, recipientEmailOverride.trim() || undefined)}
           onDelete={(id) => deleteAuditFile(id)}
           downloadingKey={downloadingKey}
+          regeneratingId={regeneratingId}
           recipientEmailOverride={recipientEmailOverride}
           onChangeRecipientEmailOverride={setRecipientEmailOverride}
           defaultAdminEmail={user?.email}

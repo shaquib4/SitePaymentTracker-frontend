@@ -102,11 +102,14 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
   const [recipientEmailOverride, setRecipientEmailOverride] = useState('');
   const {
     auditFiles,
+    emailStatus,
     isLoading: auditFilesLoading,
     refetch: refetchAuditFiles,
     activeJobsCount,
     isQueueing: isQueueingAuditPack,
     queueAuditPack,
+    regeneratingId,
+    regenerateAuditPack,
     deleteAuditFile,
     downloadingKey,
     downloadAuditFile,
@@ -1225,11 +1228,14 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
       {canExportAudit && showAuditFilesModal && (
         <AuditFilesModal
           auditFiles={auditFiles}
+          emailStatus={emailStatus}
           isLoading={auditFilesLoading}
           onRefresh={() => refetchAuditFiles()}
           onDownload={downloadAuditFile}
+          onRegenerate={(id) => regenerateAuditPack(id, recipientEmailOverride.trim() || undefined)}
           onDelete={(id) => deleteAuditFile(id)}
           downloadingKey={downloadingKey}
+          regeneratingId={regeneratingId}
           recipientEmailOverride={recipientEmailOverride}
           onChangeRecipientEmailOverride={setRecipientEmailOverride}
           defaultAdminEmail={user?.email}

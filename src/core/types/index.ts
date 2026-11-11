@@ -502,6 +502,13 @@ export interface AdminAuditPackRequest {
   reportTitle?: string;
 }
 
+export interface EmailConfigurationStatus {
+  isConfigured: boolean;
+  provider: 'Resend' | 'SMTP' | 'None' | string;
+  fromAddress?: string;
+  message: string;
+}
+
 export interface AuditReportJobItem {
   id: string;
   reportTitle: string;
@@ -524,6 +531,8 @@ export interface AuditReportJobItem {
   excelFileName: string;
   hasPdf: boolean;
   hasExcel: boolean;
+  pdfDownloadedAtUtc?: string;
+  excelDownloadedAtUtc?: string;
   requestedByName: string;
   requestedByEmail: string;
   emailDispatched: boolean;

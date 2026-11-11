@@ -1,15 +1,30 @@
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
-import { AdminAuditPackRequest, AuditReportJobItem } from '../types';
+import {
+  AdminAuditPackRequest,
+  AuditReportJobItem,
+  EmailConfigurationStatus,
+} from '../types';
 
 export function useAdminAuditReports(enabled: boolean) {
   const queryClient = useQueryClient();
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [bannerMessage, setBannerMessage] = useState<{
     type: 'success' | 'error';
     text: string;
   } | null>(null);
+
+  const { data: emailStatus } = useQuery<EmailConfigurationStatus>({
+    queryKey: ['admin-email-status'],
+    queryFn: async () => {
+      const res = await apiClient.get<EmailConfigurationStatus>('/reports/email-status');
+      return res.data;
+    },
+    enabled,
+    staleTime: 60_000,
+  });
 
   const {
     data: auditFiles = [],
@@ -41,9 +56,13 @@ export function useAdminAuditReports(enabled: boolean) {
     },
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['admin-audit-files'] });
+      const mailNote =
+        emailStatus?.isConfigured
+          ? `Email will be dispatched to ${created.requestedByEmail} once ready.`
+          : `Note: Server SMTP/Resend email is not configured yet — download directly from Audit Files once ready.`;
       setBannerMessage({
         type: 'success',
-        text: `Audit pack queued in background (${created.periodLabel}). Breakdown PDF + Expenses Excel will be emailed to ${created.requestedByEmail} and saved in Audit Files.`,
+        text: `Audit pack queued in background (${created.periodLabel}). ${mailNote}`,
       });
     },
     onError: (err: any) => {
@@ -53,6 +72,41 @@ export function useAdminAuditReports(enabled: boolean) {
         err?.message ||
         'Failed to queue background audit pack.';
       setBannerMessage({ type: 'error', text: String(detail) });
+    },
+  });
+
+  const regenerateMutation = useMutation({
+    mutationFn: async ({
+      jobId,
+      recipientEmail,
+    }: {
+      jobId: string;
+      recipientEmail?: string;
+    }) => {
+      setRegeneratingId(jobId);
+      const res = await apiClient.post<AuditReportJobItem>(
+        `/reports/admin-files/${jobId}/regenerate`,
+        recipientEmail ? { recipientEmail } : {}
+      );
+      return res.data;
+    },
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-audit-files'] });
+      setBannerMessage({
+        type: 'success',
+        text: `Regenerating "${updated.reportTitle}" in background using saved period (${updated.periodLabel}) & filters.`,
+      });
+    },
+    onError: (err: any) => {
+      const detail =
+        err?.response?.data?.detail ||
+        err?.response?.data?.title ||
+        err?.message ||
+        'Failed to regenerate audit pack.';
+      setBannerMessage({ type: 'error', text: String(detail) });
+    },
+    onSettled: () => {
+      setRegeneratingId(null);
     },
   });
 
@@ -87,15 +141,31 @@ export function useAdminAuditReports(enabled: boolean) {
         link.click();
         link.remove();
         window.URL.revokeObjectURL(url);
+
+        // Binary was purged from Postgres immediately after download; refresh metadata list
+        queryClient.invalidateQueries({ queryKey: ['admin-audit-files'] });
+        setBannerMessage({
+          type: 'success',
+          text: `Downloaded "${fileName}". Binary cleared from server DB to save space — click Regenerate anytime to rebuild it.`,
+        });
       } catch (err: any) {
-        const detail =
-          err?.response?.data?.detail || err?.message || `Failed to download ${format.toUpperCase()} file.`;
-        setBannerMessage({ type: 'error', text: String(detail) });
+        queryClient.invalidateQueries({ queryKey: ['admin-audit-files'] });
+        const status = err?.response?.status;
+        if (status === 410) {
+          setBannerMessage({
+            type: 'error',
+            text: `This ${format.toUpperCase()} file was already downloaded and cleared from DB. Click "Regenerate" to rebuild it from saved filters.`,
+          });
+        } else {
+          const detail =
+            err?.response?.data?.detail || err?.message || `Failed to download ${format.toUpperCase()} file.`;
+          setBannerMessage({ type: 'error', text: String(detail) });
+        }
       } finally {
         setDownloadingKey(null);
       }
     },
-    []
+    [queryClient]
   );
 
   const activeJobsCount = auditFiles.filter(
@@ -104,11 +174,15 @@ export function useAdminAuditReports(enabled: boolean) {
 
   return {
     auditFiles,
+    emailStatus,
     isLoading,
     refetch,
     activeJobsCount,
     isQueueing: queueMutation.isPending,
     queueAuditPack: queueMutation.mutate,
+    regeneratingId,
+    regenerateAuditPack: (jobId: string, recipientEmail?: string) =>
+      regenerateMutation.mutate({ jobId, recipientEmail }),
     deleteAuditFile: deleteMutation.mutate,
     isDeleting: deleteMutation.isPending,
     downloadingKey,
