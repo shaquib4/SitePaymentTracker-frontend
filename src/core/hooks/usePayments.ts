@@ -3,22 +3,31 @@ import { apiClient } from '../api/client';
 import {
   PaymentRequest,
   PaymentFilterQuery,
+  PagedPaymentsResponse,
   CreatePaymentDto,
   FinanceMetrics,
   ExportJobStatusResponse,
 } from '../types';
 
 export const usePaymentsQuery = (query: PaymentFilterQuery) => {
-  return useQuery({
+  return useQuery<PagedPaymentsResponse>({
     queryKey: ['payments', query],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.append('year', query.year.toString());
       if (query.status) params.append('status', query.status);
       if (query.category) params.append('category', query.category);
+      if (query.siteId) params.append('siteId', query.siteId);
+      if (query.requesterId) params.append('requesterId', query.requesterId);
       if (query.search) params.append('search', query.search);
+      if (query.startDate) params.append('startDate', query.startDate);
+      if (query.endDate) params.append('endDate', query.endDate);
+      if (query.page) params.append('page', query.page.toString());
+      if (query.pageSize) params.append('pageSize', query.pageSize.toString());
+      if (query.onlyMine) params.append('onlyMine', 'true');
+      if (query.scope) params.append('scope', query.scope);
 
-      const res = await apiClient.get<PaymentRequest[]>(`/payments?${params.toString()}`);
+      const res = await apiClient.get<PagedPaymentsResponse>(`/payments?${params.toString()}`);
       return res.data;
     },
   });

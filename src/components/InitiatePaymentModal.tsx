@@ -30,6 +30,7 @@ export const InitiatePaymentModal: React.FC<InitiatePaymentModalProps> = ({
   targetRoleLabel,
 }) => {
   const { user } = useAuth();
+  const isAdmin = user?.role === 'Admin';
   const queryClient = useQueryClient();
 
   const [title, setTitle] = useState(defaultTitle);
@@ -84,6 +85,10 @@ export const InitiatePaymentModal: React.FC<InitiatePaymentModalProps> = ({
         throw new Error('Please provide an expense / wage claim title.');
       }
 
+      if (isAdmin && !description.trim()) {
+        throw new Error('Description is required when an Admin submits a payment request.');
+      }
+
       if (!startDate || !endDate) {
         throw new Error('Start and End dates are required.');
       }
@@ -113,6 +118,9 @@ export const InitiatePaymentModal: React.FC<InitiatePaymentModalProps> = ({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['supervisor-payments'] });
+      queryClient.invalidateQueries({ queryKey: ['accountant-payments'] });
+      queryClient.invalidateQueries({ queryKey: ['officeworker-payments'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       queryClient.invalidateQueries({ queryKey: ['sites-profitability'] });
       onClose();
@@ -319,12 +327,22 @@ export const InitiatePaymentModal: React.FC<InitiatePaymentModalProps> = ({
             <label className="block text-xs font-semibold text-slate-300 uppercase mb-1 flex items-center">
               <FileText className="w-3.5 h-3.5 mr-1 text-amber-400" />
               Description & Work Justification
+              {isAdmin ? (
+                <span className="text-rose-400 ml-1">*</span>
+              ) : (
+                <span className="text-slate-400 font-normal normal-case ml-1">(Optional)</span>
+              )}
             </label>
             <textarea
               rows={2}
+              required={isAdmin}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Provide background context, hours/days breakdown, or purchase order details..."
+              placeholder={
+                isAdmin
+                  ? 'Required: Provide detailed justification, work breakdown, or purchase order details...'
+                  : 'Optional: Provide background context, hours/days breakdown, or purchase order details...'
+              }
               className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
             />
           </div>

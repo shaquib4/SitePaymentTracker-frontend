@@ -44,7 +44,9 @@ export interface PaymentRequest {
   submitterEmail: string;
   submitterPhone?: string;
   title: string;
-  description: string;
+  description?: string;
+  requestedAmount?: number;
+  approvedAmount?: number | null;
   amount: number;
   currency: string;
   category: string;
@@ -71,7 +73,9 @@ export interface PaymentRequest {
 
 export interface CreatePaymentDto {
   title: string;
-  description: string;
+  description?: string;
+  requestedAmount?: number;
+  approvedAmount?: number | null;
   amount: number;
   currency?: string;
   category: string;
@@ -92,12 +96,14 @@ export interface WageRequestDto {
   startDate: string;
   endDate: string;
   title: string;
-  description: string;
+  description?: string;
 }
 
 export interface ApprovePaymentDto {
   version: number;
   comments?: string;
+  approvedAmount?: number;
+  updatedDescription?: string;
   overrideCategoryId?: string;
   newCategoryName?: string;
   overrideSiteId?: string;
@@ -177,6 +183,7 @@ export interface LabourerWagePayoutItem {
   claimDays: number;
   dailyWageRate: number;
   expectedWage: number;
+  requestedAmount?: number;
   actualAmount: number;
   variance: number;
   hasDiscrepancy: boolean;
@@ -251,9 +258,11 @@ export interface SiteProfitabilityDto {
 export interface SiteExpenseItemDto {
   id: string;
   title: string;
-  description: string;
+  description?: string;
   category: string;
   categoryId?: string;
+  requestedAmount?: number;
+  approvedAmount?: number | null;
   amount: number;
   status: PaymentStatus;
   startDate: string;
@@ -310,6 +319,8 @@ export interface UserHistoryItem {
   id: string;
   title: string;
   description?: string;
+  requestedAmount?: number;
+  approvedAmount?: number | null;
   amount: number;
   category: string;
   siteId?: string;
@@ -338,6 +349,12 @@ export interface UserHistoryResponse {
   totalRequestsCount: number;
   history: UserHistoryItem[];
   historicalRequests?: UserHistoryItem[];
+  grandTotalAmount?: number;
+  filteredCount?: number;
+  page?: number;
+  pageSize?: number;
+  totalPages?: number;
+  categoryBreakdowns?: CategoryBreakdown[];
 }
 
 export type UserHistoryDto = UserHistoryResponse;
@@ -383,9 +400,77 @@ export interface PaymentFilterQuery {
   year: number;
   status?: PaymentStatus;
   category?: string;
+  siteId?: string;
+  requesterId?: string;
   search?: string;
   startDate?: string;
   endDate?: string;
+  page?: number;
+  pageSize?: number;
+  onlyMine?: boolean;
+  scope?: 'wage_requests' | 'material_requests' | 'my_wages';
+}
+
+export interface PaymentPagedSummary {
+  grandTotalAmount: number;
+  totalApprovedAmount: number;
+  totalCompletedAmount: number;
+  totalPendingAmount: number;
+  totalInfoRequestedAmount: number;
+  totalRejectedAmount: number;
+  totalApprovedCount: number;
+  totalCompletedCount: number;
+  totalPendingCount: number;
+  totalInfoRequestedCount: number;
+  totalRejectedCount: number;
+  categoryBreakdowns: CategoryBreakdown[];
+}
+
+export interface PagedPaymentsResponse {
+  items: PaymentRequest[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  summary: PaymentPagedSummary;
+}
+
+export interface PagedSiteExpensesResponse {
+  items: SiteExpenseItemDto[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  totalApprovedExpenses: number;
+  totalPendingExpenses: number;
+  grandTotalExpenses: number;
+  distinctCategories: string[];
+  categoryBreakdowns: CategoryBreakdown[];
+}
+
+export interface PagedUsersResponse {
+  items: User[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+}
+
+export interface LabourerPagedSummary {
+  totalCount: number;
+  activeCount: number;
+  inactiveCount: number;
+  totalApprovedPayouts: number;
+  totalClaimedPayouts: number;
+}
+
+export interface PagedLabourersResponse {
+  items: LabourerDto[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  summary: LabourerPagedSummary;
 }
 
 export interface ExportJobStatusResponse {

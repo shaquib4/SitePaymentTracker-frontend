@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../core/api/client';
-import { LabourerDto, Site, User } from '../core/types';
+import { LabourerDto, PagedUsersResponse, Site } from '../core/types';
 import {
   X,
   UserCheck,
@@ -41,16 +41,16 @@ export const EditLabourerModal: React.FC<EditLabourerModalProps> = ({
   });
 
   // Fetch active supervisors for Admin reassignment
-  const { data: users = [] } = useQuery<User[]>({
-    queryKey: ['users'],
+  const { data: supervisorsData } = useQuery<PagedUsersResponse>({
+    queryKey: ['users-supervisors-all'],
     queryFn: async () => {
-      const res = await apiClient.get<User[]>('/users');
+      const res = await apiClient.get<PagedUsersResponse>('/users?role=Supervisor&all=true');
       return res.data;
     },
     enabled: isAdmin,
   });
 
-  const activeSupervisors = users.filter((u) => u.role === 'Supervisor' && u.isActive);
+  const activeSupervisors = (supervisorsData?.items || []).filter((u) => u.isActive);
 
   const updateMutation = useMutation({
     mutationFn: async () => {

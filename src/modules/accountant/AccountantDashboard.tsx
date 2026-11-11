@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../core/api/client';
 import {
@@ -6,8 +6,9 @@ import {
   RequestInfoPaymentDto,
   SiteProfitabilityDto,
   ExpenseCategory,
-  CategoryBreakdown
+  PagedPaymentsResponse
 } from '../../core/types';
+import { useDebouncedValue } from '../../core/hooks/useDebouncedValue';
 import { ExpensePieChart } from '../../components/ExpensePieChart';
 import { SitePieChart } from '../../components/SitePieChart';
 import { PeriodAccessModal } from '../../components/PeriodAccessModal';
@@ -16,7 +17,7 @@ import { InitiatePaymentModal } from '../../components/InitiatePaymentModal';
 import { Pagination } from '../../components/Pagination';
 import { TableShimmer, CardShimmer } from '../../components/ShimmerLoader';
 import { QuarterFilterBar } from '../../components/QuarterFilterBar';
-import { useAuth } from '../../core/auth/AuthContext';
+import { AmountBreakdown } from '../../components/AmountBreakdown';
 import {
   FileSpreadsheet,
   Search,
@@ -33,7 +34,6 @@ import {
 
 export const AccountantDashboard: React.FC = () => {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
   const [selectedYear, setSelectedYear] = useState<number>(2026);
   const [searchFilter, setSearchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -49,6 +49,12 @@ export const AccountantDashboard: React.FC = () => {
   // Pagination State (Default 20 items per page)
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(20);
+  const debouncedSearchFilter = useDebouncedValue(searchFilter, 300);
+
+  // Auto-reset pagination to page 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedYear, statusFilter, startDate, endDate, selectedCategoryFilter, selectedSiteFilter, debouncedSearchFilter, ledgerMode, pageSize]);
 
   // Modals
   const [infoModalPayment, setInfoModalPayment] = useState<PaymentRequest | null>(null);
@@ -69,16 +75,33 @@ export const AccountantDashboard: React.FC = () => {
     },
   });
 
-  const { data: payments = [], isLoading } = useQuery<PaymentRequest[]>({
-    queryKey: ['accountant-payments', selectedYear, statusFilter, startDate, endDate, selectedCategoryFilter, selectedSiteFilter],
+  const { data: paymentsData, isLoading } = useQuery<PagedPaymentsResponse>({
+    queryKey: [
+      'accountant-payments',
+      selectedYear,
+      statusFilter,
+      startDate,
+      endDate,
+      selectedCategoryFilter,
+      selectedSiteFilter,
+      debouncedSearchFilter,
+      ledgerMode,
+      currentPage,
+      pageSize,
+    ],
     queryFn: async () => {
-      let url = `/payments?year=${selectedYear}`;
-      if (statusFilter) url += `&status=${statusFilter}`;
-      if (startDate) url += `&startDate=${startDate}`;
-      if (endDate) url += `&endDate=${endDate}`;
-      if (selectedCategoryFilter) url += `&category=${encodeURIComponent(selectedCategoryFilter)}`;
-      if (selectedSiteFilter) url += `&siteId=${selectedSiteFilter}`;
-      const res = await apiClient.get<PaymentRequest[]>(url);
+      const params = new URLSearchParams();
+      params.append('year', String(selectedYear));
+      params.append('page', String(currentPage));
+      params.append('pageSize', String(pageSize));
+      if (statusFilter) params.append('status', statusFilter);
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+      if (selectedCategoryFilter) params.append('category', selectedCategoryFilter);
+      if (selectedSiteFilter) params.append('siteId', selectedSiteFilter);
+      if (debouncedSearchFilter.trim()) params.append('search', debouncedSearchFilter.trim());
+      if (ledgerMode === 'my_wages') params.append('onlyMine', 'true');
+      const res = await apiClient.get<PagedPaymentsResponse>(`/payments?${params.toString()}`);
       return res.data;
     },
   });
@@ -136,61 +159,18 @@ export const AccountantDashboard: React.FC = () => {
     }
   };
 
-  const filteredPayments = (payments || []).filter((p) => {
-    if (ledgerMode === 'my_wages' && p.userId !== user?.userId) return false;
-    if (!searchFilter) return true;
-    const q = searchFilter.toLowerCase();
-    return (
-      (p.title || '').toLowerCase().includes(q) ||
-      (p.submitterName || '').toLowerCase().includes(q) ||
-      (p.category || '').toLowerCase().includes(q) ||
-      (p.submitterPhone && p.submitterPhone.includes(q))
-    );
-  });
+  const paymentSummary = paymentsData?.summary;
+  const paginatedPayments = paymentsData?.items || [];
+  const totalPaymentRecords = paymentsData?.totalCount ?? 0;
 
-  const totalPeriodApproved = filteredPayments
-    .filter((p) => p.status === 'Approved' || (p.status as any) === 'Completed')
-    .reduce((sum, p) => sum + p.amount, 0);
+  const totalPeriodApproved =
+    (paymentSummary?.totalApprovedAmount ?? 0) + (paymentSummary?.totalCompletedAmount ?? 0);
+  const totalPeriodPending = paymentSummary?.totalPendingAmount ?? 0;
+  const totalPeriodInfoRequested = paymentSummary?.totalInfoRequestedAmount ?? 0;
+  const totalPeriodGrand = paymentSummary?.grandTotalAmount ?? 0;
 
-  const totalPeriodPending = filteredPayments
-    .filter((p) => p.status === 'Pending')
-    .reduce((sum, p) => sum + p.amount, 0);
-
-  const totalPeriodInfoRequested = filteredPayments
-    .filter((p) => p.status === 'InfoRequested')
-    .reduce((sum, p) => sum + p.amount, 0);
-
-  const totalPeriodGrand = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
-
-  // Dynamically calculate Category Breakdowns according to active statusFilter:
-  // e.g. Pending shows only Pending, Approved shows only Approved, Completed shows only Completed.
-  const pieCategoryBreakdowns: CategoryBreakdown[] = useMemo(() => {
-    let target = filteredPayments;
-    if (statusFilter) {
-      target = filteredPayments.filter((p) => p.status === statusFilter);
-    } else {
-      const approvedOrCompleted = filteredPayments.filter(
-        (p) => p.status === 'Approved' || (p.status as any) === 'Completed'
-      );
-      target = approvedOrCompleted.length > 0 ? approvedOrCompleted : filteredPayments;
-    }
-
-    const map = new Map<string, { totalAmount: number; count: number }>();
-    target.forEach((p) => {
-      const cat = p.category || 'General';
-      const curr = map.get(cat) || { totalAmount: 0, count: 0 };
-      map.set(cat, {
-        totalAmount: curr.totalAmount + (p.amount || 0),
-        count: curr.count + 1,
-      });
-    });
-
-    return Array.from(map.entries()).map(([category, val]) => ({
-      category,
-      totalAmount: val.totalAmount,
-      count: val.count,
-    }));
-  }, [filteredPayments, statusFilter]);
+  // Backend dynamically computes CategoryBreakdowns according to active statusFilter
+  const pieCategoryBreakdowns = paymentSummary?.categoryBreakdowns || [];
 
   const siteBreakdowns = (profitability || []).map((s) => ({
     siteId: s.siteId,
@@ -198,16 +178,6 @@ export const AccountantDashboard: React.FC = () => {
     totalApprovedExpenses: s.totalApprovedExpenses,
     claimsCount: s.expenseClaimsCount,
   }));
-
-  // Auto-reset pagination to page 1 whenever filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedYear, statusFilter, startDate, endDate, selectedCategoryFilter, selectedSiteFilter, searchFilter, ledgerMode]);
-
-  const paginatedPayments = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredPayments.slice(start, start + pageSize);
-  }, [filteredPayments, currentPage, pageSize]);
 
   if (viewingSiteProfitability) {
     return (
@@ -409,7 +379,7 @@ export const AccountantDashboard: React.FC = () => {
               ₹{totalPeriodGrand.toLocaleString('en-IN')}
             </div>
             <span className="text-[11px] text-slate-500 block mt-0.5">
-              {filteredPayments.length} Claims Total
+              {totalPaymentRecords} Claims Total
             </span>
           </div>
 
@@ -523,7 +493,7 @@ export const AccountantDashboard: React.FC = () => {
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            All Company Expenses ({payments.length})
+            All Company Expenses{ledgerMode === 'all' ? ` (${totalPaymentRecords})` : ''}
           </button>
           <button
             type="button"
@@ -534,7 +504,7 @@ export const AccountantDashboard: React.FC = () => {
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            My Submitted Salary & Expense Claims ({(payments || []).filter(p => p.userId === user?.userId).length})
+            My Submitted Salary & Expense Claims{ledgerMode === 'my_wages' ? ` (${totalPaymentRecords})` : ''}
           </button>
         </div>
 
@@ -542,7 +512,7 @@ export const AccountantDashboard: React.FC = () => {
         <div className="grid grid-cols-1 gap-3.5 md:hidden">
           {isLoading ? (
             <CardShimmer count={4} />
-          ) : filteredPayments.length === 0 ? (
+          ) : paginatedPayments.length === 0 ? (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-400">
               No payment requests found for the selected period.
             </div>
@@ -579,9 +549,13 @@ export const AccountantDashboard: React.FC = () => {
                 </div>
 
                 <div>
-                  <div className="text-2xl font-black font-mono text-white">
-                    ₹{p.amount.toLocaleString('en-IN')}
-                  </div>
+                  <AmountBreakdown
+                    amount={p.amount}
+                    requestedAmount={p.requestedAmount}
+                    approvedAmount={p.approvedAmount}
+                    status={p.status}
+                    variant="card"
+                  />
                   <div className="text-sm font-bold text-white mt-1 leading-snug">{p.title}</div>
                   {p.description && (
                     <p className="text-xs text-slate-400 mt-1 line-clamp-2">{p.description}</p>
@@ -662,11 +636,11 @@ export const AccountantDashboard: React.FC = () => {
         </div>
 
         {/* Accountant Ledger Mobile Pagination */}
-        {filteredPayments.length > 0 && (
+        {!isLoading && totalPaymentRecords > 0 && (
           <div className="md:hidden bg-slate-900 border border-slate-800 rounded-2xl p-3">
             <Pagination
               currentPage={currentPage}
-              totalRecords={filteredPayments.length}
+              totalRecords={totalPaymentRecords}
               pageSize={pageSize}
               onPageChange={setCurrentPage}
               onPageSizeChange={setPageSize}
@@ -693,7 +667,7 @@ export const AccountantDashboard: React.FC = () => {
             <tbody className="divide-y divide-slate-800/60 text-slate-200">
               {isLoading ? (
                 <TableShimmer rows={6} hasActions={true} />
-              ) : filteredPayments.length === 0 ? (
+              ) : paginatedPayments.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-slate-400">
                     No payment requests found for the selected period.
@@ -744,8 +718,14 @@ export const AccountantDashboard: React.FC = () => {
                       )}
                     </td>
 
-                    <td className="py-3 px-4 font-mono font-bold text-white text-base">
-                      ₹{p.amount.toLocaleString('en-IN')}
+                    <td className="py-3 px-4">
+                      <AmountBreakdown
+                        amount={p.amount}
+                        requestedAmount={p.requestedAmount}
+                        approvedAmount={p.approvedAmount}
+                        status={p.status}
+                        variant="table"
+                      />
                     </td>
 
                     <td className="py-3 px-4">
@@ -801,11 +781,11 @@ export const AccountantDashboard: React.FC = () => {
           </table>
 
           {/* Accountant Desktop Pagination */}
-          {filteredPayments.length > 0 && (
+          {!isLoading && totalPaymentRecords > 0 && (
             <div className="p-4 bg-slate-950/40 border-t border-slate-800">
               <Pagination
                 currentPage={currentPage}
-                totalRecords={filteredPayments.length}
+                totalRecords={totalPaymentRecords}
                 pageSize={pageSize}
                 onPageChange={setCurrentPage}
                 onPageSizeChange={setPageSize}

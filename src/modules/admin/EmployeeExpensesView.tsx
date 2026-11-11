@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../core/api/client';
-import { UserHistoryResponse, UserHistoryItem, Site } from '../../core/types';
+import { UserHistoryResponse, Site } from '../../core/types';
+import { useDebouncedValue } from '../../core/hooks/useDebouncedValue';
 import { ExpensePieChart } from '../../components/ExpensePieChart';
 import { Pagination } from '../../components/Pagination';
 import { TableShimmer, CardShimmer } from '../../components/ShimmerLoader';
 import { QuarterFilterBar } from '../../components/QuarterFilterBar';
+import { AmountBreakdown } from '../../components/AmountBreakdown';
 import {
   ArrowLeft,
   Calendar,
@@ -38,11 +40,12 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
   // Pagination state (default 20 items per page)
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(20);
+  const debouncedSearchFilter = useDebouncedValue(searchFilter, 300);
 
   // Auto-reset to page 1 whenever filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [startDate, endDate, statusFilter, searchFilter, selectedSiteFilter]);
+  }, [startDate, endDate, statusFilter, debouncedSearchFilter, selectedSiteFilter, pageSize]);
 
   // Query Project Sites
   const { data: sites = [] } = useQuery<Site[]>({
@@ -53,68 +56,40 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
     },
   });
 
-  // Query User History with Date Filtering
+  // Query Server-Paginated User History with Date, Site, Status, Search Filtering
   const { data: userProfile, isLoading } = useQuery<UserHistoryResponse>({
-    queryKey: ['employee-history', userId, startDate, endDate],
+    queryKey: [
+      'employee-history',
+      userId,
+      startDate,
+      endDate,
+      selectedSiteFilter,
+      statusFilter,
+      debouncedSearchFilter,
+      currentPage,
+      pageSize,
+    ],
     queryFn: async () => {
-      let url = `/users/${userId}/history`;
       const params = new URLSearchParams();
+      params.append('page', String(currentPage));
+      params.append('pageSize', String(pageSize));
       if (startDate) params.append('startDate', startDate);
       if (endDate) params.append('endDate', endDate);
-      if (params.toString()) url += `?${params.toString()}`;
+      if (selectedSiteFilter) params.append('siteId', selectedSiteFilter);
+      if (statusFilter) params.append('status', statusFilter);
+      if (debouncedSearchFilter.trim()) params.append('search', debouncedSearchFilter.trim());
 
-      const res = await apiClient.get<UserHistoryResponse>(url);
+      const res = await apiClient.get<UserHistoryResponse>(`/users/${userId}/history?${params.toString()}`);
       return res.data;
     },
   });
 
-  const historyItems: UserHistoryItem[] = userProfile?.history || userProfile?.historicalRequests || [];
-
-  // Filter items by site, status & search
-  const filteredItems = historyItems.filter((item) => {
-    if (selectedSiteFilter && item.siteId !== selectedSiteFilter && item.siteName !== selectedSiteFilter) return false;
-    if (statusFilter && item.status !== statusFilter) return false;
-    if (searchFilter) {
-      const q = searchFilter.toLowerCase();
-      return (
-        item.title.toLowerCase().includes(q) ||
-        item.category.toLowerCase().includes(q) ||
-        (item.siteName && item.siteName.toLowerCase().includes(q))
-      );
-    }
-    return true;
-  });
-
-  const paginatedItems = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredItems.slice(start, start + pageSize);
-  }, [filteredItems, currentPage, pageSize]);
-
-  // Calculate Category breakdown for this employee in this period (Strictly approved/completed only)
-  const categoryMap = new Map<string, { total: number; count: number }>();
-  filteredItems
-    .filter((i) => i.status === 'Approved' || (i.status as any) === 'Completed')
-    .forEach((item) => {
-      const cat = item.category || 'General';
-      const curr = categoryMap.get(cat) || { total: 0, count: 0 };
-      categoryMap.set(cat, { total: curr.total + (item.amount || 0), count: curr.count + 1 });
-    });
-
-  const categoryBreakdown = Array.from(categoryMap.entries()).map(([category, val]) => ({
-    category,
-    totalAmount: val.total,
-    count: val.count,
-  }));
-
-  const periodApproved = filteredItems
-    .filter((i) => i.status === 'Approved' || (i.status as any) === 'Completed')
-    .reduce((sum, i) => sum + (i.amount || 0), 0);
-
-  const periodPending = filteredItems
-    .filter((i) => i.status === 'Pending' || i.status === 'InfoRequested')
-    .reduce((sum, i) => sum + (i.amount || 0), 0);
-
-  const periodGrandTotal = filteredItems.reduce((sum, i) => sum + (i.amount || 0), 0);
+  const paginatedItems = userProfile?.history || userProfile?.historicalRequests || [];
+  const filteredCount = userProfile?.filteredCount ?? userProfile?.totalRequestsCount ?? paginatedItems.length;
+  const categoryBreakdown = userProfile?.categoryBreakdowns || [];
+  const periodApproved = userProfile?.totalApprovedAmount ?? 0;
+  const periodPending = userProfile?.totalPendingAmount ?? 0;
+  const periodGrandTotal = userProfile?.grandTotalAmount ?? (periodApproved + periodPending);
 
   const cleanPhone = (userProfile?.phoneNumber || '').replace(/[^0-9]/g, '');
 
@@ -216,7 +191,7 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
               <div className="col-span-2 sm:col-span-1">
                 <span className="text-[11px] text-slate-400 uppercase font-semibold block">Total Claims</span>
                 <span className="text-xl font-mono font-bold text-white">
-                  {userProfile.totalRequestsCount || historyItems.length}
+                  {userProfile.totalRequestsCount ?? filteredCount}
                 </span>
               </div>
             </div>
@@ -377,12 +352,12 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
                 ₹{periodGrandTotal.toLocaleString('en-IN')}
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                Across {filteredItems.length} transactions in this timeframe
+                Across {filteredCount} transactions in this timeframe
               </p>
             </div>
           </div>
 
-          {/* Interactive Expense Pie Chart for this Employee's Approved Spend */}
+          {/* Interactive Expense Pie Chart for this Employee's Spend */}
           {categoryBreakdown.length > 0 && (
             <ExpensePieChart
               categoryBreakdowns={categoryBreakdown}
@@ -393,7 +368,7 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
           <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow">
             <div className="p-4 border-b border-slate-800 flex items-center justify-between">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                Payment Records ({filteredItems.length})
+                Payment Records ({filteredCount})
               </h3>
               <div className="relative max-w-xs w-full">
                 <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
@@ -411,7 +386,7 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
             <div className="p-4 grid grid-cols-1 gap-3 md:hidden">
               {isLoading ? (
                 <CardShimmer count={4} />
-              ) : filteredItems.length === 0 ? (
+              ) : filteredCount === 0 ? (
                 <div className="text-center py-6 text-slate-400 text-xs">
                   No expense records found for this employee in the selected period.
                 </div>
@@ -451,9 +426,13 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
                     </div>
 
                     <div>
-                      <div className="text-xl font-black font-mono text-white">
-                        ₹{(item.amount || 0).toLocaleString('en-IN')}
-                      </div>
+                      <AmountBreakdown
+                        amount={item.amount}
+                        requestedAmount={item.requestedAmount}
+                        approvedAmount={item.approvedAmount}
+                        status={item.status}
+                        variant="card"
+                      />
                       <div className="text-sm font-semibold text-white mt-0.5">{item.title}</div>
                       {item.description && (
                         <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{item.description}</p>
@@ -484,11 +463,11 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
             </div>
 
             {/* Mobile Pagination */}
-            {filteredItems.length > 0 && (
+            {!isLoading && filteredCount > 0 && (
               <div className="p-3 md:hidden border-t border-slate-800">
                 <Pagination
                   currentPage={currentPage}
-                  totalRecords={filteredItems.length}
+                  totalRecords={filteredCount}
                   pageSize={pageSize}
                   onPageChange={setCurrentPage}
                   onPageSizeChange={setPageSize}
@@ -514,7 +493,7 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
               <tbody className="divide-y divide-slate-800/60 text-slate-200">
                 {isLoading ? (
                   <TableShimmer rows={5} hasActions={false} />
-                ) : filteredItems.length === 0 ? (
+                ) : filteredCount === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-8 text-center text-slate-400 text-xs">
                       No expense records found for this employee in the selected period.
@@ -582,8 +561,14 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
                         )}
                       </td>
 
-                      <td className="py-3 px-4 font-mono font-bold text-white text-base">
-                        ₹{(item.amount || 0).toLocaleString('en-IN')}
+                      <td className="py-3 px-4">
+                        <AmountBreakdown
+                          amount={item.amount}
+                          requestedAmount={item.requestedAmount}
+                          approvedAmount={item.approvedAmount}
+                          status={item.status}
+                          variant="table"
+                        />
                       </td>
 
                       <td className="py-3 px-4">
@@ -616,11 +601,11 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
             </table>
 
             {/* Desktop Pagination */}
-            {filteredItems.length > 0 && (
+            {!isLoading && filteredCount > 0 && (
               <div className="p-4 bg-slate-950/40 border-t border-slate-800">
                 <Pagination
                   currentPage={currentPage}
-                  totalRecords={filteredItems.length}
+                  totalRecords={filteredCount}
                   pageSize={pageSize}
                   onPageChange={setCurrentPage}
                   onPageSizeChange={setPageSize}

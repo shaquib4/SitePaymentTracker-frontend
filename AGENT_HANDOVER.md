@@ -1,6 +1,6 @@
 # KEPaymentTracker — Comprehensive System & Agent Handover Document
 
-> **Document Version:** 3.4  
+> **Document Version:** 3.6  
 > **Last Updated:** November 2026  
 > **Company / Tenant:** **Khan Enterprises**  
 > **Codebase Paths:**  
@@ -27,6 +27,8 @@
 7. **Dedicated Office Worker Role**: Office workers can independently submit claims (travel, supplies, utilities) and track personal historical payments with multi-year period filters, while being strictly isolated from company-wide financials.
 8. **Direct Site View Approvals**: Admins can inspect and approve payment claims directly inside the dedicated Project Site view without switching to the master ledger.
 9. **High-Performance Pagination & Shimmer UI (v3.4)**: Limits display to 20 records per page by default across all dashboards to eliminate DOM lag on annual filters, with animated shimmer loading placeholders and calendar quarter filters.
+10. **True Backend Server-Side Pagination & SQL Summarization (v3.5)**: Eliminates unbounded full-table transfers across all primary endpoints (`GET /api/payments`, `/api/sites/{id}/expenses`, `/api/users/{id}/history`, `/api/users`, `/api/labourers`). PostgreSQL executes `CountAsync`, `GroupBy` financial KPIs, and dynamic pie-chart breakdowns across all matching rows while serializing only the active page (`pageSize = 20` default).
+11. **Role-Aware Optional Descriptions & Requested/Approved Amount Editing (v3.6)**: `Description` is optional for all non-admin roles and required for Admin-initiated payment requests; during Admin approval, Admin can edit the employee's `Description` and adjust `ApprovedAmount` strictly `<= RequestedAmount` (and `> 0`), while `RequestedAmount` and `ApprovedAmount` are tracked and displayed across ledgers and Excel exports.
 
 ---
 
@@ -149,7 +151,18 @@ All test accounts use the default password: **`Password123!`**
   - Smart Quarter calculation with year rollover: When in Q1, clicking "Last Quarter" automatically calculates Q4 of the previous year.
   - Visual active state pill indication and verification sub-bar (`Active Range: YYYY-MM-DD → YYYY-MM-DD`).
 
-### 4.6. Mobile Layout & Date Picker Sizing
+### 4.6. True Backend Server-Side Pagination & SQL Summarization Engine (v3.5)
+- **PostgreSQL-First Filtering, Aggregates & Slicing**:
+  - `GET /api/payments` (`PaymentRepository.GetPagedPaymentsAsync`) performs all filtering (`Year`, `Status`, `SiteId`, `StartDate`, `EndDate`, `Search`, `Scope`, `OnlyMine`, `Category`) in SQL, computes `PaymentPagedSummaryDto` (`GrandTotalAmount`, `TotalApprovedAmount`, `TotalCompletedAmount`, `TotalPendingAmount`, `TotalInfoRequestedAmount`, `TotalRejectedAmount`, counts, and `CategoryBreakdowns`) across the full matching dataset using `GroupBy`, and transfers only `.Skip((page - 1) * pageSize).Take(pageSize)` rows (`pageSize = 20` default, max `200`).
+  - Dynamic pie-chart category breakdown is computed on the server: reflects the active `Status` filter when selected, or defaults to `Approved + Completed` (falling back to all if none) while ignoring `Category` so pie slices remain interactive.
+  - `GET /api/sites/{siteId}/expenses` returns `PagedSiteExpensesResponseDto` with SQL `status`, `search`, date, and `category` filtering, distinct site categories, KPI sums, and `CategoryBreakdowns`.
+  - `GET /api/users/{id}/history` returns extended `UserHistoryResponse` with `siteId`, `status`, `search`, `page`, `pageSize` filtering, `FilteredCount`, `TotalRequestsCount`, and `CategoryBreakdowns`.
+  - `GET /api/users` and `GET /api/labourers` return `PagedUsersResponseDto` and `PagedLabourersResponseDto` respectively, with `?all=true` / `?role=Supervisor&all=true` lightweight lookup support strictly for form/filter dropdowns.
+- **Debounced Search & Zero Full-Table Transfers on Frontend**:
+  - Added shared `useDebouncedValue` hook (`300ms`) across `AdminDashboard`, `AccountantDashboard`, `OfficeWorkerDashboard`, `SiteExpensesModal`, and `EmployeeExpensesView`.
+  - `SupervisorDashboard` passes `scope` (`wage_requests`, `my_wages`, `material_requests`) plus `page`/`pageSize` and uses `pageSize=1` summary queries for KPIs/pie charts.
+
+### 4.7. Mobile Layout & Date Picker Sizing
 - Date pickers styled across all dashboards with `min-height: 42px !important; height: 42px !important; [color-scheme: dark]` to match button and dropdown heights on iOS Safari and Chrome.
 - Top tab headers use `.horizontal-scroll-container` with `whitespace-nowrap flex-shrink-0` for smooth swipeable navigation.
 

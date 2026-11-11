@@ -1,18 +1,21 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../core/api/client';
 import {
   SiteExpenseItemDto,
   SiteProfitabilityDto,
-  CategoryBreakdown,
   ExpenseCategory,
-  ApprovePaymentDto
+  ApprovePaymentDto,
+  PagedSiteExpensesResponse
 } from '../core/types';
+import { useDebouncedValue } from '../core/hooks/useDebouncedValue';
 import { useAuth } from '../core/auth/AuthContext';
 import { ExpensePieChart } from './ExpensePieChart';
 import { Pagination } from './Pagination';
 import { TableShimmer, CardShimmer } from './ShimmerLoader';
 import { QuarterFilterBar } from './QuarterFilterBar';
+import { ApproveExpenseModal } from './ApproveExpenseModal';
+import { AmountBreakdown } from './AmountBreakdown';
 import {
   ArrowLeft,
   Building2,
@@ -73,18 +76,15 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
   // Pagination state (default 20 items per page)
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(20);
+  const debouncedSearchFilter = useDebouncedValue(searchFilter, 300);
 
   // Auto-reset to page 1 whenever filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [startDate, endDate, categoryFilter, statusFilter, searchFilter]);
+  }, [startDate, endDate, categoryFilter, statusFilter, debouncedSearchFilter, pageSize]);
 
   // Modals for Admin Approval & Clarification Requests
   const [showApproveModalPayment, setShowApproveModalPayment] = useState<SiteExpenseItemDto | null>(null);
-  const [approveComments, setApproveComments] = useState('');
-  const [approveCategoryMode, setApproveCategoryMode] = useState<'existing' | 'new'>('existing');
-  const [approveSelectedCategory, setApproveSelectedCategory] = useState('');
-  const [approveNewCategoryName, setApproveNewCategoryName] = useState('');
 
   const [showRequestInfoModalPayment, setShowRequestInfoModalPayment] = useState<SiteExpenseItemDto | null>(null);
   const [requestInfoQuestions, setRequestInfoQuestions] = useState('');
@@ -94,19 +94,30 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
 
   const handleBack = onBack || onClose || (() => {});
 
-  // Fetch all site expenses
-  const { data: expenses = [], isLoading, isError, refetch } = useQuery<SiteExpenseItemDto[]>({
-    queryKey: ['site-expenses', siteId, startDate, endDate, categoryFilter],
+  // Fetch server-paginated site expenses + server SQL aggregates
+  const { data: expensesData, isLoading, isError, refetch } = useQuery<PagedSiteExpensesResponse>({
+    queryKey: [
+      'site-expenses',
+      siteId,
+      startDate,
+      endDate,
+      categoryFilter,
+      statusFilter,
+      debouncedSearchFilter,
+      currentPage,
+      pageSize,
+    ],
     queryFn: async () => {
-      if (!siteId) return [];
-      let url = `/sites/${siteId}/expenses`;
       const params = new URLSearchParams();
+      params.append('page', String(currentPage));
+      params.append('pageSize', String(pageSize));
       if (startDate) params.append('startDate', startDate);
       if (endDate) params.append('endDate', endDate);
       if (categoryFilter) params.append('category', categoryFilter);
-      if (params.toString()) url += `?${params.toString()}`;
+      if (statusFilter) params.append('status', statusFilter);
+      if (debouncedSearchFilter.trim()) params.append('search', debouncedSearchFilter.trim());
 
-      const res = await apiClient.get<SiteExpenseItemDto[]>(url);
+      const res = await apiClient.get<PagedSiteExpensesResponse>(`/sites/${siteId}/expenses?${params.toString()}`);
       return res.data;
     },
     enabled: Boolean(siteId),
@@ -134,8 +145,6 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       setShowApproveModalPayment(null);
-      setApproveComments('');
-      setApproveNewCategoryName('');
     },
   });
 
@@ -184,64 +193,13 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
     setSearchFilter('');
   };
 
-  // Local filtering for search and status
-  const filteredExpenses = expenses.filter((e) => {
-    if (statusFilter && e.status !== statusFilter) return false;
-    if (searchFilter) {
-      const q = searchFilter.toLowerCase();
-      return (
-        e.title.toLowerCase().includes(q) ||
-        e.category.toLowerCase().includes(q) ||
-        (e.description && e.description.toLowerCase().includes(q)) ||
-        (e.labourerName && e.labourerName.toLowerCase().includes(q)) ||
-        (e.submitterName && e.submitterName.toLowerCase().includes(q)) ||
-        (e.submitterPhone && e.submitterPhone.includes(q))
-      );
-    }
-    return true;
-  });
-
-  const paginatedExpenses = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredExpenses.slice(start, start + pageSize);
-  }, [filteredExpenses, currentPage, pageSize]);
-
-  // Period totals
-  const totalPeriodApproved = filteredExpenses
-    .filter((e) => e.status === 'Approved' || (e.status as any) === 'Completed')
-    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-
-  const totalPeriodPending = filteredExpenses
-    .filter((e) => e.status === 'Pending' || e.status === 'InfoRequested')
-    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-
-  const periodGrandTotal = filteredExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-
-  // Extract distinct categories for this site
-  const uniqueCategories = Array.from(new Set(expenses.map((e) => e.category).filter(Boolean)));
-
-  // Calculate category breakdown for ExpensePieChart according to active statusFilter
-  // e.g. Pending shows only Pending, Approved shows only Approved, Completed shows only Completed.
-  const categoryMap = new Map<string, { totalAmount: number; count: number }>();
-  const pieTargetExpenses = statusFilter
-    ? filteredExpenses.filter((e) => e.status === statusFilter)
-    : filteredExpenses.filter((e) => e.status === 'Approved' || (e.status as any) === 'Completed');
-
-  const baseExpenses = (!statusFilter && pieTargetExpenses.length === 0)
-    ? filteredExpenses
-    : pieTargetExpenses;
-
-  baseExpenses.forEach((e) => {
-    const cat = e.category || 'General';
-    const curr = categoryMap.get(cat) || { totalAmount: 0, count: 0 };
-    categoryMap.set(cat, { totalAmount: curr.totalAmount + (Number(e.amount) || 0), count: curr.count + 1 });
-  });
-
-  const categoryBreakdowns: CategoryBreakdown[] = Array.from(categoryMap.entries()).map(([category, val]) => ({
-    category,
-    totalAmount: val.totalAmount,
-    count: val.count,
-  }));
+  const paginatedExpenses = expensesData?.items || [];
+  const totalExpenseRecords = expensesData?.totalCount ?? 0;
+  const totalPeriodApproved = expensesData?.totalApprovedExpenses ?? 0;
+  const totalPeriodPending = expensesData?.totalPendingExpenses ?? 0;
+  const periodGrandTotal = expensesData?.grandTotalExpenses ?? 0;
+  const uniqueCategories = expensesData?.distinctCategories || [];
+  const categoryBreakdowns = expensesData?.categoryBreakdowns || [];
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -494,7 +452,7 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
               ₹{periodGrandTotal.toLocaleString('en-IN')}
             </div>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              {filteredExpenses.length} Claims Total
+              {totalExpenseRecords} Claims Total
             </p>
           </div>
 
@@ -557,7 +515,7 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h3 className="text-base font-bold text-white">
-              Itemized Site Expenses Ledger ({filteredExpenses.length} Records)
+              Itemized Site Expenses Ledger ({totalExpenseRecords} Records)
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
               Audit trail of all material, contractor and labour wage claims charged to {siteName}
@@ -592,7 +550,7 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                 Retry
               </button>
             </div>
-          ) : filteredExpenses.length === 0 ? (
+          ) : totalExpenseRecords === 0 ? (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-400">
               No expense records found for this site in the selected period.
             </div>
@@ -616,9 +574,13 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
 
                 {/* Amount & Title */}
                 <div>
-                  <div className="text-2xl font-black font-mono text-white">
-                    ₹{(Number(item.amount) || 0).toLocaleString('en-IN')}
-                  </div>
+                  <AmountBreakdown
+                    amount={item.amount}
+                    requestedAmount={item.requestedAmount}
+                    approvedAmount={item.approvedAmount}
+                    status={item.status}
+                    variant="card"
+                  />
                   <div className="text-sm font-bold text-white mt-1 leading-snug">{item.title}</div>
                   {item.description && (
                     <p className="text-xs text-slate-400 mt-1 line-clamp-2">{item.description}</p>
@@ -708,10 +670,8 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                         <button
                           type="button"
                           onClick={() => {
+                            approveMutation.reset();
                             setShowApproveModalPayment(item);
-                            setApproveSelectedCategory(item.categoryId || '');
-                            setApproveNewCategoryName('');
-                            setApproveComments('');
                           }}
                           className="w-full py-2.5 px-3 min-h-[42px] bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs shadow-md flex items-center justify-center transition-colors"
                         >
@@ -754,11 +714,11 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
         </div>
 
         {/* Site Expenses Mobile Pagination */}
-        {filteredExpenses.length > 0 && (
+        {!isLoading && totalExpenseRecords > 0 && (
           <div className="md:hidden bg-slate-900 border border-slate-800 rounded-2xl p-3">
             <Pagination
               currentPage={currentPage}
-              totalRecords={filteredExpenses.length}
+              totalRecords={totalExpenseRecords}
               pageSize={pageSize}
               onPageChange={setCurrentPage}
               onPageSizeChange={setPageSize}
@@ -799,7 +759,7 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                     </button>
                   </td>
                 </tr>
-              ) : filteredExpenses.length === 0 ? (
+              ) : totalExpenseRecords === 0 ? (
                 <tr>
                   <td colSpan={isAdmin ? 8 : 7} className="py-10 text-center text-slate-400">
                     No expense records found for this site in the selected period.
@@ -848,8 +808,14 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                       </div>
                     </td>
 
-                    <td className="py-3.5 px-4 font-mono font-bold text-white text-sm">
-                      ₹{(Number(item.amount) || 0).toLocaleString('en-IN')}
+                    <td className="py-3.5 px-4">
+                      <AmountBreakdown
+                        amount={item.amount}
+                        requestedAmount={item.requestedAmount}
+                        approvedAmount={item.approvedAmount}
+                        status={item.status}
+                        variant="table"
+                      />
                     </td>
 
                     <td className="py-3.5 px-4">
@@ -905,10 +871,8 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                             <button
                               type="button"
                               onClick={() => {
+                                approveMutation.reset();
                                 setShowApproveModalPayment(item);
-                                setApproveSelectedCategory(item.categoryId || '');
-                                setApproveNewCategoryName('');
-                                setApproveComments('');
                               }}
                               className="px-3 py-1.5 min-h-[36px] bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs shadow transition-colors inline-flex items-center"
                             >
@@ -949,11 +913,11 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
           </table>
 
           {/* Desktop Pagination */}
-          {filteredExpenses.length > 0 && (
+          {!isLoading && totalExpenseRecords > 0 && (
             <div className="p-4 bg-slate-950/40 border-t border-slate-800">
               <Pagination
                 currentPage={currentPage}
-                totalRecords={filteredExpenses.length}
+                totalRecords={totalExpenseRecords}
                 pageSize={pageSize}
                 onPageChange={setCurrentPage}
                 onPageSizeChange={setPageSize}
@@ -985,151 +949,26 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
         </div>
       )}
 
-      {/* MODAL: APPROVE & DYNAMIC RE-CATEGORIZATION */}
+      {/* MODAL: APPROVE, EDIT AMOUNT & DESCRIPTION, AND CATEGORIZE */}
       {showApproveModalPayment && (
-        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-white">Approve & Categorize Expense</h3>
-                <p className="text-xs text-slate-400">
-                  {showApproveModalPayment.title} - ₹{(showApproveModalPayment.amount || 0).toLocaleString('en-IN')}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowApproveModalPayment(null)}
-                className="text-slate-400 hover:text-white p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-                  Categorization Strategy
-                </label>
-                <div className="flex space-x-3 text-xs font-medium">
-                  <button
-                    type="button"
-                    onClick={() => setApproveCategoryMode('existing')}
-                    className={`px-3 py-1.5 rounded-lg border transition ${
-                      approveCategoryMode === 'existing'
-                        ? 'border-amber-500 bg-amber-500/10 text-amber-300'
-                        : 'border-slate-700 text-slate-400'
-                    }`}
-                  >
-                    Select Existing Category
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setApproveCategoryMode('new')}
-                    className={`px-3 py-1.5 rounded-lg border transition ${
-                      approveCategoryMode === 'new'
-                        ? 'border-amber-500 bg-amber-500/10 text-amber-300'
-                        : 'border-slate-700 text-slate-400'
-                    }`}
-                  >
-                    Type New Category (Auto-Save)
-                  </button>
-                </div>
-              </div>
-
-              {approveCategoryMode === 'existing' ? (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-                    Select Category
-                  </label>
-                  <select
-                    value={approveSelectedCategory}
-                    onChange={(e) => setApproveSelectedCategory(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-amber-500 min-h-[42px]"
-                  >
-                    <option value="">Keep current ({showApproveModalPayment.category})</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-                    New Category Name (e.g. "Sariya - Grade Fe550")
-                  </label>
-                  <input
-                    type="text"
-                    value={approveNewCategoryName}
-                    onChange={(e) => setApproveNewCategoryName(e.target.value)}
-                    placeholder="Enter new category name..."
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-amber-500 min-h-[42px]"
-                  />
-                  <span className="text-[11px] text-slate-500 mt-0.5 block">
-                    Backend will automatically save this category to the database for future use.
-                  </span>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-                  Approval Comments / Verification Notes
-                </label>
-                <textarea
-                  rows={2}
-                  value={approveComments}
-                  onChange={(e) => setApproveComments(e.target.value)}
-                  placeholder="Verified quote with site engineer..."
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
-
-              {showApproveModalPayment.userId === user?.userId && (
-                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-xs text-amber-300 flex items-start space-x-2">
-                  <ShieldCheck className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
-                  <span>
-                    <strong>Peer Review Required:</strong> You initiated this payment claim. In our 4-admin setup, you cannot approve your own request; one of the other 3 Admins must review and approve it.
-                  </span>
-                </div>
-              )}
-
-              <div className="pt-2 flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowApproveModalPayment(null)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={approveMutation.isPending || showApproveModalPayment.userId === user?.userId}
-                  onClick={() => {
-                    approveMutation.mutate({
-                      paymentId: showApproveModalPayment.id,
-                      dto: {
-                        version: showApproveModalPayment.version || 1,
-                        comments: approveComments || 'Approved by Admin in Site Ledger',
-                        overrideCategoryId:
-                          approveCategoryMode === 'existing' && approveSelectedCategory
-                            ? approveSelectedCategory
-                            : undefined,
-                        newCategoryName:
-                          approveCategoryMode === 'new' && approveNewCategoryName
-                            ? approveNewCategoryName
-                            : undefined,
-                      },
-                    });
-                  }}
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs shadow transition-colors disabled:opacity-50 min-h-[42px] flex items-center"
-                >
-                  {approveMutation.isPending ? 'Processing...' : 'Confirm Approval'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ApproveExpenseModal
+          key={showApproveModalPayment.id}
+          payment={showApproveModalPayment}
+          categories={categories}
+          currentUserId={user?.userId}
+          isPending={approveMutation.isPending}
+          defaultComment="Approved by Admin in Site Ledger"
+          serverError={
+            (approveMutation.error as any)?.response?.data?.detail ||
+            (approveMutation.error as any)?.response?.data?.message ||
+            (approveMutation.error as Error | null)?.message
+          }
+          onClose={() => {
+            approveMutation.reset();
+            setShowApproveModalPayment(null);
+          }}
+          onConfirm={(paymentId, dto) => approveMutation.mutate({ paymentId, dto })}
+        />
       )}
 
       {/* MODAL: ADMIN REQUEST MORE DETAILS */}

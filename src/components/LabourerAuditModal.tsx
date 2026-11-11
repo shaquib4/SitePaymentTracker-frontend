@@ -239,9 +239,14 @@ export const LabourerAuditModal: React.FC<LabourerAuditModalProps> = ({ labourer
                             <div className="text-slate-400 text-[11px]">
                               Expected: ₹{p.expectedWage.toLocaleString('en-IN')}
                             </div>
-                            <div className="text-sm font-bold text-white">
-                              Claimed: ₹{p.actualAmount.toLocaleString('en-IN')}
+                            <div className="text-slate-200 text-xs font-semibold">
+                              Requested: ₹{(p.requestedAmount && p.requestedAmount > 0 ? p.requestedAmount : p.actualAmount).toLocaleString('en-IN')}
                             </div>
+                            {(p.status === 'Approved' || p.status === 'Completed') && (
+                              <div className="text-sm font-bold text-emerald-400">
+                                Approved: ₹{p.actualAmount.toLocaleString('en-IN')}
+                              </div>
+                            )}
                             {p.hasDiscrepancy && (
                               <span
                                 className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${

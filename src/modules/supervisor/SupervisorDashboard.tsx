@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../core/api/client';
 import {
@@ -7,7 +7,9 @@ import {
   LabourerDto,
   Site,
   WageRequestDto,
-  CreatePaymentDto
+  CreatePaymentDto,
+  PagedPaymentsResponse,
+  PagedLabourersResponse
 } from '../../core/types';
 import {
   Users,
@@ -26,12 +28,21 @@ import {
 import { LabourerAuditModal } from '../../components/LabourerAuditModal';
 import { EditLabourerModal } from '../../components/EditLabourerModal';
 import { InitiatePaymentModal } from '../../components/InitiatePaymentModal';
+import { AmountBreakdown } from '../../components/AmountBreakdown';
 import { ExpensePieChart } from '../../components/ExpensePieChart';
+import { Pagination } from '../../components/Pagination';
+import { TableShimmer, CardShimmer } from '../../components/ShimmerLoader';
 
 export const SupervisorDashboard: React.FC = () => {
   const queryClient = useQueryClient();
   const currentCalendarYear = new Date().getFullYear();
   const [activeTab, setActiveTab] = useState<'wage_requests' | 'my_wages' | 'labourers' | 'material_requests'>('wage_requests');
+
+  // Pagination states (20 items/page default)
+  const [paymentsPage, setPaymentsPage] = useState<number>(1);
+  const [paymentsPageSize, setPaymentsPageSize] = useState<number>(20);
+  const [labourersPage, setLabourersPage] = useState<number>(1);
+  const [labourersPageSize, setLabourersPageSize] = useState<number>(20);
 
   // Modals
   const [showOnboardLabourerModal, setShowOnboardLabourerModal] = useState(false);
@@ -62,22 +73,78 @@ export const SupervisorDashboard: React.FC = () => {
   const [matStartDate, setMatStartDate] = useState('');
   const [matEndDate, setMatEndDate] = useState('');
 
-  // Queries
-  const { data: payments = [], isLoading: paymentsLoading } = useQuery<PaymentRequest[]>({
-    queryKey: ['supervisor-payments', currentCalendarYear],
+  useEffect(() => {
+    setPaymentsPage(1);
+  }, [activeTab, paymentsPageSize]);
+
+  useEffect(() => {
+    setLabourersPage(1);
+  }, [selectedLabourerSiteFilter, labourersPageSize]);
+
+  const activePaymentScope =
+    activeTab === 'wage_requests' || activeTab === 'my_wages' || activeTab === 'material_requests'
+      ? activeTab
+      : 'wage_requests';
+
+  // Server-paginated active payments list for the selected Supervisor tab
+  const { data: paymentsData, isLoading: paymentsLoading } = useQuery<PagedPaymentsResponse>({
+    queryKey: ['supervisor-payments', 'paged', currentCalendarYear, activePaymentScope, paymentsPage, paymentsPageSize],
     queryFn: async () => {
-      const res = await apiClient.get<PaymentRequest[]>(`/payments?year=${currentCalendarYear}`);
+      const params = new URLSearchParams();
+      params.append('year', String(currentCalendarYear));
+      params.append('scope', activePaymentScope);
+      params.append('page', String(paymentsPage));
+      params.append('pageSize', String(paymentsPageSize));
+      const res = await apiClient.get<PagedPaymentsResponse>(`/payments?${params.toString()}`);
+      return res.data;
+    },
+    enabled: activeTab !== 'labourers',
+  });
+
+  // Lightweight overall summary + category breakdown (pageSize=1 avoids fetching full ledger)
+  const { data: overallSummaryData } = useQuery<PagedPaymentsResponse>({
+    queryKey: ['supervisor-payments', 'overall-summary', currentCalendarYear],
+    queryFn: async () => {
+      const res = await apiClient.get<PagedPaymentsResponse>(`/payments?year=${currentCalendarYear}&page=1&pageSize=1`);
       return res.data;
     },
   });
 
-  const { data: labourers = [] } = useQuery<Labourer[]>({
-    queryKey: ['labourers'],
+  // Lightweight wage pending summary for KPI banner
+  const { data: wageSummaryData } = useQuery<PagedPaymentsResponse>({
+    queryKey: ['supervisor-payments', 'wage-summary', currentCalendarYear],
     queryFn: async () => {
-      const res = await apiClient.get<Labourer[]>('/labourers');
+      const res = await apiClient.get<PagedPaymentsResponse>(`/payments?year=${currentCalendarYear}&scope=wage_requests&page=1&pageSize=1`);
       return res.data;
     },
   });
+
+  // Server-paginated labourers grid for Roster tab
+  const { data: labourersPagedData, isLoading: labourersLoading } = useQuery<PagedLabourersResponse>({
+    queryKey: ['labourers', 'paged', selectedLabourerSiteFilter, labourersPage, labourersPageSize],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.append('page', String(labourersPage));
+      params.append('pageSize', String(labourersPageSize));
+      if (selectedLabourerSiteFilter) params.append('siteId', selectedLabourerSiteFilter);
+      const res = await apiClient.get<PagedLabourersResponse>(`/labourers?${params.toString()}`);
+      return res.data;
+    },
+  });
+
+  // Managed labourers lookup for Wage Request dropdown
+  const { data: allLabourersData } = useQuery<PagedLabourersResponse>({
+    queryKey: ['labourers', 'all'],
+    queryFn: async () => {
+      const res = await apiClient.get<PagedLabourersResponse>('/labourers?all=true');
+      return res.data;
+    },
+  });
+
+  const labourers = allLabourersData?.items || [];
+  const paginatedLabourers = labourersPagedData?.items || [];
+  const totalFilteredLabourers = labourersPagedData?.totalCount ?? 0;
+  const totalManagedLabourers = allLabourersData?.totalCount ?? labourers.length;
 
   const { data: sites = [] } = useQuery<Site[]>({
     queryKey: ['sites'],
@@ -156,29 +223,15 @@ export const SupervisorDashboard: React.FC = () => {
     },
   });
 
-  const wagePayments = payments.filter((p) => p.labourerId != null);
-  const materialPayments = payments.filter((p) => p.labourerId == null);
+  const activePayments = paymentsData?.items || [];
+  const activePaymentsTotalCount = paymentsData?.totalCount ?? 0;
 
-  const totalWagePending = wagePayments.filter((p) => p.status === 'Pending').reduce((s, p) => s + p.amount, 0);
-  const totalApproved = payments.filter((p) => p.status === 'Approved' || (p.status as any) === 'Completed').reduce((s, p) => s + p.amount, 0);
+  const totalWagePending = wageSummaryData?.summary?.totalPendingAmount ?? 0;
+  const totalApproved =
+    (overallSummaryData?.summary?.totalApprovedAmount ?? 0) +
+    (overallSummaryData?.summary?.totalCompletedAmount ?? 0);
 
-  // Pie chart calculation strictly for approved/completed payments (Pending is excluded)
-  const approvedSupervisorPayments = (payments || []).filter(
-    (p) => p.status === 'Approved' || (p.status as any) === 'Completed'
-  );
-
-  const categoryMap = new Map<string, { total: number; count: number }>();
-  approvedSupervisorPayments.forEach((p) => {
-    const cat = p.category || (p.labourerId ? 'Labour Wages' : 'General');
-    const curr = categoryMap.get(cat) || { total: 0, count: 0 };
-    categoryMap.set(cat, { total: curr.total + (p.amount || 0), count: curr.count + 1 });
-  });
-
-  const supervisorCategoryBreakdown = Array.from(categoryMap.entries()).map(([category, val]) => ({
-    category,
-    totalAmount: val.total,
-    count: val.count,
-  }));
+  const supervisorCategoryBreakdown = overallSummaryData?.summary?.categoryBreakdowns || [];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -238,7 +291,7 @@ export const SupervisorDashboard: React.FC = () => {
             <span className="text-xs font-semibold text-slate-400 uppercase">My Managed Labourers</span>
             <Users className="w-5 h-5 text-blue-400" />
           </div>
-          <div className="mt-2 text-2xl font-black text-white">{labourers.length} Workers</div>
+          <div className="mt-2 text-2xl font-black text-white">{totalManagedLabourers} Workers</div>
           <p className="text-xs text-slate-400 mt-1">Active muster roll personnel under supervision</p>
         </div>
 
@@ -279,7 +332,7 @@ export const SupervisorDashboard: React.FC = () => {
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60 sm:hover:bg-transparent'
             }`}
           >
-            Labour Wage Requests ({wagePayments.length})
+            Labour Wage Requests{activeTab === 'wage_requests' ? ` (${activePaymentsTotalCount})` : wageSummaryData ? ` (${wageSummaryData.totalCount})` : ''}
           </button>
           <button
             onClick={() => setActiveTab('my_wages')}
@@ -289,7 +342,7 @@ export const SupervisorDashboard: React.FC = () => {
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60 sm:hover:bg-transparent'
             }`}
           >
-            My Supervisor Wages ({payments.filter((p) => p.labourerId == null && (p.category.includes('Wage') || p.category.includes('Salary') || p.category.includes('Supervisor'))).length})
+            My Supervisor Wages{activeTab === 'my_wages' ? ` (${activePaymentsTotalCount})` : ''}
           </button>
           <button
             onClick={() => setActiveTab('labourers')}
@@ -299,7 +352,7 @@ export const SupervisorDashboard: React.FC = () => {
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60 sm:hover:bg-transparent'
             }`}
           >
-            Labour Roster & Wage Audit ({labourers.length})
+            Labour Roster & Wage Audit ({totalManagedLabourers})
           </button>
           <button
             onClick={() => setActiveTab('material_requests')}
@@ -309,7 +362,7 @@ export const SupervisorDashboard: React.FC = () => {
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60 sm:hover:bg-transparent'
             }`}
           >
-            Material & Site Claims ({materialPayments.length})
+            Material & Site Claims{activeTab === 'material_requests' ? ` (${activePaymentsTotalCount})` : ''}
           </button>
         </div>
       </div>
@@ -320,15 +373,13 @@ export const SupervisorDashboard: React.FC = () => {
           {/* MOBILE CARD GRID (Phone view < md) */}
           <div className="grid grid-cols-1 gap-3 md:hidden">
             {paymentsLoading ? (
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center text-slate-400">
-                Loading wage requests...
-              </div>
-            ) : wagePayments.length === 0 ? (
+              <CardShimmer count={4} />
+            ) : activePayments.length === 0 ? (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center text-slate-400">
                 No labour wage requests submitted yet. Click "Request Labour Wage" above.
               </div>
             ) : (
-              wagePayments.map((p) => (
+              activePayments.map((p) => (
                 <div key={p.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <span className="bg-blue-500/20 text-blue-300 font-semibold px-2.5 py-0.5 rounded-lg text-xs">
@@ -350,9 +401,13 @@ export const SupervisorDashboard: React.FC = () => {
                   </div>
 
                   <div>
-                    <div className="text-2xl font-black font-mono text-white">
-                      ₹{p.amount.toLocaleString('en-IN')}
-                    </div>
+                    <AmountBreakdown
+                      amount={p.amount}
+                      requestedAmount={p.requestedAmount}
+                      approvedAmount={p.approvedAmount}
+                      status={p.status}
+                      variant="card"
+                    />
                     <div className="text-sm font-bold text-white mt-1">{p.title}</div>
                     {p.description && (
                       <p className="text-xs text-slate-400 mt-1">{p.description}</p>
@@ -404,19 +459,15 @@ export const SupervisorDashboard: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-slate-200">
                 {paymentsLoading ? (
-                  <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-400">
-                      Loading wage requests...
-                    </td>
-                  </tr>
-                ) : wagePayments.length === 0 ? (
+                  <TableShimmer rows={5} hasActions={false} />
+                ) : activePayments.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-8 text-center text-slate-400">
                       No labour wage requests submitted yet. Click "Request Labour Wage" above.
                     </td>
                   </tr>
                 ) : (
-                  wagePayments.map((p) => (
+                  activePayments.map((p) => (
                     <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
                       <td className="py-3 px-4">
                         <div className="font-semibold text-white">{p.title}</div>
@@ -430,8 +481,14 @@ export const SupervisorDashboard: React.FC = () => {
                         {p.startDate} to {p.endDate}
                       </td>
 
-                      <td className="py-3 px-4 font-mono font-bold text-white">
-                        ₹{p.amount.toLocaleString('en-IN')}
+                      <td className="py-3 px-4">
+                        <AmountBreakdown
+                          amount={p.amount}
+                          requestedAmount={p.requestedAmount}
+                          approvedAmount={p.approvedAmount}
+                          status={p.status}
+                          variant="table"
+                        />
                       </td>
 
                       <td className="py-3 px-4">
@@ -470,6 +527,20 @@ export const SupervisorDashboard: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          {!paymentsLoading && activePaymentsTotalCount > 0 && (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
+              <Pagination
+                currentPage={paymentsPage}
+                totalRecords={activePaymentsTotalCount}
+                pageSize={paymentsPageSize}
+                onPageChange={setPaymentsPage}
+                onPageSizeChange={setPaymentsPageSize}
+                themeColor="blue"
+                recordLabel="wage requests"
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -497,12 +568,14 @@ export const SupervisorDashboard: React.FC = () => {
 
           {/* MOBILE CARD GRID FOR SUPERVISOR'S OWN CLAIMS (Phone view < md) */}
           <div className="grid grid-cols-1 gap-3 md:hidden">
-            {payments.filter(p => p.labourerId == null && (p.category.includes('Wage') || p.category.includes('Salary') || p.category.includes('Supervisor'))).length === 0 ? (
+            {paymentsLoading ? (
+              <CardShimmer count={3} />
+            ) : activePayments.length === 0 ? (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center text-slate-400 text-xs">
                 No personal wage claims submitted yet. Click "Request New Wage / Fee" to submit.
               </div>
             ) : (
-              payments.filter(p => p.labourerId == null && (p.category.includes('Wage') || p.category.includes('Salary') || p.category.includes('Supervisor'))).map((p) => (
+              activePayments.map((p) => (
                 <div key={p.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <span className="bg-emerald-500/20 text-emerald-300 font-semibold px-2.5 py-0.5 rounded-lg text-xs">
@@ -524,9 +597,14 @@ export const SupervisorDashboard: React.FC = () => {
                   </div>
 
                   <div>
-                    <div className="text-2xl font-black font-mono text-emerald-400">
-                      ₹{(p.amount || 0).toLocaleString('en-IN')}
-                    </div>
+                    <AmountBreakdown
+                      amount={p.amount}
+                      requestedAmount={p.requestedAmount}
+                      approvedAmount={p.approvedAmount}
+                      status={p.status}
+                      variant="card"
+                      highlightColorClass="text-emerald-400"
+                    />
                     <div className="text-sm font-bold text-white mt-1">{p.title}</div>
                     {p.description && (
                       <p className="text-xs text-slate-400 mt-1">{p.description}</p>
@@ -570,14 +648,16 @@ export const SupervisorDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-slate-200">
-                {payments.filter(p => p.labourerId == null && (p.category.includes('Wage') || p.category.includes('Salary') || p.category.includes('Supervisor'))).length === 0 ? (
+                {paymentsLoading ? (
+                  <TableShimmer rows={5} hasActions={false} />
+                ) : activePayments.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-8 text-center text-slate-400 text-xs">
                       No personal wage claims submitted yet. Click "Request New Wage / Fee" to submit.
                     </td>
                   </tr>
                 ) : (
-                  payments.filter(p => p.labourerId == null && (p.category.includes('Wage') || p.category.includes('Salary') || p.category.includes('Supervisor'))).map((p) => (
+                  activePayments.map((p) => (
                     <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
                       <td className="py-3 px-4">
                         <span className="font-bold text-white block">{p.title}</span>
@@ -589,8 +669,15 @@ export const SupervisorDashboard: React.FC = () => {
                       <td className="py-3 px-4 text-xs font-mono">
                         {p.startDate} → {p.endDate}
                       </td>
-                      <td className="py-3 px-4 font-mono font-bold text-emerald-400">
-                        ₹{(p.amount || 0).toLocaleString('en-IN')}
+                      <td className="py-3 px-4">
+                        <AmountBreakdown
+                          amount={p.amount}
+                          requestedAmount={p.requestedAmount}
+                          approvedAmount={p.approvedAmount}
+                          status={p.status}
+                          variant="table"
+                          highlightColorClass="text-emerald-400"
+                        />
                       </td>
                       <td className="py-3 px-4">
                         <span
@@ -616,6 +703,20 @@ export const SupervisorDashboard: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          {!paymentsLoading && activePaymentsTotalCount > 0 && (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
+              <Pagination
+                currentPage={paymentsPage}
+                totalRecords={activePaymentsTotalCount}
+                pageSize={paymentsPageSize}
+                onPageChange={setPaymentsPage}
+                onPageSizeChange={setPaymentsPageSize}
+                themeColor="emerald"
+                recordLabel="claims"
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -632,7 +733,7 @@ export const SupervisorDashboard: React.FC = () => {
                 onChange={(e) => setSelectedLabourerSiteFilter(e.target.value)}
                 className="bg-slate-800 border border-slate-700 text-white rounded-lg px-2.5 py-1 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none"
               >
-                <option value="">All Project Sites ({labourers.length})</option>
+                <option value="">All Project Sites ({totalManagedLabourers})</option>
                 {sites.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -651,11 +752,15 @@ export const SupervisorDashboard: React.FC = () => {
             )}
           </div>
 
+          {labourersLoading ? (
+            <CardShimmer count={3} />
+          ) : paginatedLabourers.length === 0 ? (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center text-slate-400 text-xs">
+              No labourers found matching the selected site filter.
+            </div>
+          ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
-            {labourers.filter((l) => {
-              if (selectedLabourerSiteFilter && l.siteId !== selectedLabourerSiteFilter && l.siteName !== selectedLabourerSiteFilter) return false;
-              return true;
-            }).map((l) => (
+            {paginatedLabourers.map((l) => (
               <div key={l.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-lg">
                 <div className="flex items-center space-x-3">
                   <div className="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-blue-400 font-bold text-lg">
@@ -740,6 +845,21 @@ export const SupervisorDashboard: React.FC = () => {
               </div>
             ))}
           </div>
+          )}
+
+          {!labourersLoading && totalFilteredLabourers > 0 && (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
+              <Pagination
+                currentPage={labourersPage}
+                totalRecords={totalFilteredLabourers}
+                pageSize={labourersPageSize}
+                onPageChange={setLabourersPage}
+                onPageSizeChange={setLabourersPageSize}
+                themeColor="blue"
+                recordLabel="labourers"
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -748,12 +868,14 @@ export const SupervisorDashboard: React.FC = () => {
         <div className="space-y-4">
           {/* MOBILE CARD GRID FOR MATERIAL & SITE EXPENSES (Phone view < md) */}
           <div className="grid grid-cols-1 gap-3 md:hidden">
-            {materialPayments.length === 0 ? (
+            {paymentsLoading ? (
+              <CardShimmer count={3} />
+            ) : activePayments.length === 0 ? (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center text-slate-400 text-xs">
                 No material expense claims recorded yet. Click "Claim Material Expense" above.
               </div>
             ) : (
-              materialPayments.map((p) => (
+              activePayments.map((p) => (
                 <div key={p.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <span className="bg-amber-500/20 text-amber-300 font-semibold px-2.5 py-0.5 rounded-lg text-xs">
@@ -775,9 +897,13 @@ export const SupervisorDashboard: React.FC = () => {
                   </div>
 
                   <div>
-                    <div className="text-2xl font-black font-mono text-white">
-                      ₹{(p.amount || 0).toLocaleString('en-IN')}
-                    </div>
+                    <AmountBreakdown
+                      amount={p.amount}
+                      requestedAmount={p.requestedAmount}
+                      approvedAmount={p.approvedAmount}
+                      status={p.status}
+                      variant="card"
+                    />
                     <div className="text-sm font-bold text-white mt-1">{p.title}</div>
                     {p.description && (
                       <p className="text-xs text-slate-400 mt-1">{p.description}</p>
@@ -815,7 +941,16 @@ export const SupervisorDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-slate-200">
-                {materialPayments.map((p) => (
+                {paymentsLoading ? (
+                  <TableShimmer rows={5} hasActions={false} />
+                ) : activePayments.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-slate-400 text-xs">
+                      No material expense claims recorded yet. Click "Claim Material Expense" above.
+                    </td>
+                  </tr>
+                ) : (
+                  activePayments.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
                     <td className="py-3 px-4">
                       <div className="font-semibold text-white">{p.title}</div>
@@ -824,8 +959,14 @@ export const SupervisorDashboard: React.FC = () => {
                     <td className="py-3 px-4">
                       <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-xs">{p.category}</span>
                     </td>
-                    <td className="py-3 px-4 font-mono font-bold text-white">
-                      ₹{p.amount.toLocaleString('en-IN')}
+                    <td className="py-3 px-4">
+                      <AmountBreakdown
+                        amount={p.amount}
+                        requestedAmount={p.requestedAmount}
+                        approvedAmount={p.approvedAmount}
+                        status={p.status}
+                        variant="table"
+                      />
                     </td>
                     <td className="py-3 px-4">
                       <span className="text-xs font-semibold text-amber-300">{p.status}</span>
@@ -834,10 +975,25 @@ export const SupervisorDashboard: React.FC = () => {
                       {p.approvalComments || 'Awaiting Review'}
                     </td>
                   </tr>
-                ))}
+                ))
+                )}
               </tbody>
             </table>
           </div>
+
+          {!paymentsLoading && activePaymentsTotalCount > 0 && (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
+              <Pagination
+                currentPage={paymentsPage}
+                totalRecords={activePaymentsTotalCount}
+                pageSize={paymentsPageSize}
+                onPageChange={setPaymentsPage}
+                onPageSizeChange={setPaymentsPageSize}
+                themeColor="amber"
+                recordLabel="material claims"
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -1060,13 +1216,14 @@ export const SupervisorDashboard: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Work Description</label>
+                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                  Work Description <span className="text-slate-400 font-normal normal-case">(Optional)</span>
+                </label>
                 <textarea
                   rows={2}
-                  required
                   value={wageDesc}
                   onChange={(e) => setWageDesc(e.target.value)}
-                  placeholder="Bar-bending, slab casting muster roll..."
+                  placeholder="Optional: Bar-bending, slab casting muster roll..."
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -1197,12 +1354,14 @@ export const SupervisorDashboard: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Details / Invoice No</label>
+                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                  Details / Invoice No <span className="text-slate-400 font-normal normal-case">(Optional)</span>
+                </label>
                 <textarea
                   rows={2}
                   value={matDesc}
                   onChange={(e) => setMatDesc(e.target.value)}
-                  placeholder="Invoice details, supplier name..."
+                  placeholder="Optional: Invoice details, supplier name..."
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
               </div>

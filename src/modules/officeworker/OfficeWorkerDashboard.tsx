@@ -2,12 +2,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../core/auth/AuthContext';
 import { apiClient } from '../../core/api/client';
-import { PaymentRequest, UserHistoryResponse, CategoryBreakdown } from '../../core/types';
+import { UserHistoryResponse, PagedPaymentsResponse } from '../../core/types';
+import { useDebouncedValue } from '../../core/hooks/useDebouncedValue';
 import { InitiatePaymentModal } from '../../components/InitiatePaymentModal';
 import { ExpensePieChart } from '../../components/ExpensePieChart';
 import { Pagination } from '../../components/Pagination';
 import { TableShimmer, CardShimmer } from '../../components/ShimmerLoader';
 import { QuarterFilterBar } from '../../components/QuarterFilterBar';
+import { AmountBreakdown } from '../../components/AmountBreakdown';
 import {
   Briefcase,
   PlusCircle,
@@ -39,11 +41,12 @@ export const OfficeWorkerDashboard: React.FC = () => {
   // Pagination state (default 20 items per page)
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(20);
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
 
   // Auto-reset to page 1 whenever filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedYear, startDate, endDate, statusFilter, categoryFilter, searchQuery]);
+  }, [selectedYear, startDate, endDate, statusFilter, categoryFilter, debouncedSearchQuery, pageSize]);
 
   const resetFilters = () => {
     setStartDate('');
@@ -53,80 +56,70 @@ export const OfficeWorkerDashboard: React.FC = () => {
     setSearchQuery('');
   };
 
-  // Query: Payments strictly submitted by the logged-in user for the chosen year
+  // Query: Server-paginated payments strictly submitted by the logged-in user
   // (Backend automatically enforces userFilter = currentUserId for OfficeWorker role)
-  const { data: payments = [], isLoading } = useQuery<PaymentRequest[]>({
-    queryKey: ['officeworker-payments', user?.userId, selectedYear],
+  const { data: paymentsData, isLoading } = useQuery<PagedPaymentsResponse>({
+    queryKey: [
+      'officeworker-payments',
+      user?.userId,
+      selectedYear,
+      startDate,
+      endDate,
+      statusFilter,
+      categoryFilter,
+      debouncedSearchQuery,
+      currentPage,
+      pageSize,
+    ],
     queryFn: async () => {
-      const res = await apiClient.get<PaymentRequest[]>(`/payments?year=${selectedYear}`);
+      const params = new URLSearchParams();
+      params.append('year', String(selectedYear));
+      params.append('page', String(currentPage));
+      params.append('pageSize', String(pageSize));
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+      if (statusFilter) params.append('status', statusFilter);
+      if (categoryFilter) params.append('category', categoryFilter);
+      if (debouncedSearchQuery.trim()) params.append('search', debouncedSearchQuery.trim());
+
+      const res = await apiClient.get<PagedPaymentsResponse>(`/payments?${params.toString()}`);
       return res.data;
     },
     enabled: !!user?.userId,
   });
 
-  // Query: Lifetime User History endpoint (strictly for self)
+  // Query: Lightweight Lifetime User History aggregate (pageSize=1 avoids fetching rows)
   const { data: historyProfile } = useQuery<UserHistoryResponse>({
     queryKey: ['officeworker-history-profile', user?.userId, startDate, endDate],
     queryFn: async () => {
-      let url = `/users/${user?.userId}/history`;
       const params = new URLSearchParams();
+      params.append('page', '1');
+      params.append('pageSize', '1');
       if (startDate) params.append('startDate', startDate);
       if (endDate) params.append('endDate', endDate);
-      if (params.toString()) url += `?${params.toString()}`;
 
-      const res = await apiClient.get<UserHistoryResponse>(url);
+      const res = await apiClient.get<UserHistoryResponse>(`/users/${user?.userId}/history?${params.toString()}`);
       return res.data;
     },
     enabled: !!user?.userId,
   });
 
-  // Filter payments locally by date range, category, status, and search query
-  const filteredPayments = payments.filter((p) => {
-    if (startDate && p.startDate < startDate) return false;
-    if (endDate && p.endDate > endDate) return false;
-    if (statusFilter && p.status !== statusFilter) return false;
-    if (categoryFilter && p.category !== categoryFilter) return false;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      return (
-        p.title.toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q) ||
-        (p.description && p.description.toLowerCase().includes(q)) ||
-        (p.invoiceNumber && p.invoiceNumber.toLowerCase().includes(q))
-      );
-    }
-    return true;
-  });
+  const paginatedPayments = paymentsData?.items || [];
+  const totalPaymentRecords = paymentsData?.totalCount ?? 0;
+  const paymentSummary = paymentsData?.summary;
 
-  const paginatedPayments = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredPayments.slice(start, start + pageSize);
-  }, [filteredPayments, currentPage, pageSize]);
+  // Server-computed metrics across all matching records
+  const totalClaimed = paymentSummary?.grandTotalAmount ?? 0;
+  const totalApproved =
+    (paymentSummary?.totalApprovedAmount ?? 0) + (paymentSummary?.totalCompletedAmount ?? 0);
+  const totalPending =
+    (paymentSummary?.totalPendingAmount ?? 0) + (paymentSummary?.totalInfoRequestedAmount ?? 0);
 
-  // Calculate summary metrics strictly for themselves in the active period
-  const totalClaimed = filteredPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-  const totalApproved = filteredPayments
-    .filter((p) => p.status === 'Approved' || (p.status as any) === 'Completed')
-    .reduce((sum, p) => sum + (p.amount || 0), 0);
-  const totalPending = filteredPayments
-    .filter((p) => p.status === 'Pending' || p.status === 'InfoRequested')
-    .reduce((sum, p) => sum + (p.amount || 0), 0);
-
-  // Extract distinct categories from their requests
-  const uniqueCategories = Array.from(new Set(payments.map((p) => p.category).filter(Boolean)));
-
-  // Calculate category breakdown for Pie Chart
-  const categoryMap = new Map<string, { totalAmount: number; count: number }>();
-  filteredPayments.forEach((p) => {
-    const cat = p.category || 'General Office';
-    const curr = categoryMap.get(cat) || { totalAmount: 0, count: 0 };
-    categoryMap.set(cat, { totalAmount: curr.totalAmount + (p.amount || 0), count: curr.count + 1 });
-  });
-  const categoryBreakdowns: CategoryBreakdown[] = Array.from(categoryMap.entries()).map(([category, stats]) => ({
-    category,
-    totalAmount: stats.totalAmount,
-    count: stats.count,
-  }));
+  const categoryBreakdowns = paymentSummary?.categoryBreakdowns || [];
+  const uniqueCategories = useMemo(
+    () => Array.from(new Set(categoryBreakdowns.map((c) => c.category).filter(Boolean))),
+    [categoryBreakdowns]
+  );
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -339,7 +332,7 @@ export const OfficeWorkerDashboard: React.FC = () => {
             ₹{totalClaimed.toLocaleString('en-IN')}
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
-            {filteredPayments.length} Claims submitted in this period
+            {totalPaymentRecords} Claims submitted in this period
           </p>
         </div>
 
@@ -395,7 +388,11 @@ export const OfficeWorkerDashboard: React.FC = () => {
           <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-3">
             Personal Expense Category Breakdown
           </h3>
-          <ExpensePieChart categoryBreakdowns={categoryBreakdowns} />
+          <ExpensePieChart
+            categoryBreakdowns={categoryBreakdowns}
+            selectedCategory={categoryFilter || null}
+            onSelectCategory={(cat) => setCategoryFilter(cat || '')}
+          />
         </div>
       )}
 
@@ -404,7 +401,7 @@ export const OfficeWorkerDashboard: React.FC = () => {
         <div className="p-5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-white">
-              My Payment Claims & Expense Audit ({filteredPayments.length})
+              My Payment Claims & Expense Audit ({totalPaymentRecords})
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
               Personal muster of claims submitted by you for {selectedYear}
@@ -447,7 +444,7 @@ export const OfficeWorkerDashboard: React.FC = () => {
               </table>
             </div>
           </div>
-        ) : filteredPayments.length === 0 ? (
+        ) : totalPaymentRecords === 0 ? (
           <div className="p-12 text-center text-slate-400 space-y-3">
             <FileText className="w-10 h-10 mx-auto text-slate-600" />
             <p className="text-sm font-medium text-slate-300">
@@ -501,11 +498,15 @@ export const OfficeWorkerDashboard: React.FC = () => {
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <div className="font-bold text-white text-sm">
-                          ₹{p.amount.toLocaleString('en-IN')}
-                        </div>
-                        <div className="text-[10px] text-slate-500">
-                          Req: {new Date(p.createdAtUtc).toLocaleDateString()}
+                        <AmountBreakdown
+                          amount={p.amount}
+                          requestedAmount={p.requestedAmount}
+                          approvedAmount={p.approvedAmount}
+                          status={p.status}
+                          variant="table"
+                        />
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          Submitted: {new Date(p.createdAtUtc).toLocaleDateString()}
                         </div>
                       </td>
 
@@ -528,11 +529,11 @@ export const OfficeWorkerDashboard: React.FC = () => {
               </table>
 
               {/* Desktop Pagination */}
-              {filteredPayments.length > 0 && (
+              {totalPaymentRecords > 0 && (
                 <div className="p-4 bg-slate-950/40 border-t border-slate-800">
                   <Pagination
                     currentPage={currentPage}
-                    totalRecords={filteredPayments.length}
+                    totalRecords={totalPaymentRecords}
                     pageSize={pageSize}
                     onPageChange={setCurrentPage}
                     onPageSizeChange={setPageSize}
@@ -553,9 +554,13 @@ export const OfficeWorkerDashboard: React.FC = () => {
                       <p className="text-[11px] text-cyan-400 font-medium">{p.category}</p>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm font-black text-white">
-                        ₹{p.amount.toLocaleString('en-IN')}
-                      </div>
+                      <AmountBreakdown
+                        amount={p.amount}
+                        requestedAmount={p.requestedAmount}
+                        approvedAmount={p.approvedAmount}
+                        status={p.status}
+                        variant="table"
+                      />
                       <div className="mt-1">{getStatusBadge(p.status)}</div>
                     </div>
                   </div>
@@ -585,11 +590,11 @@ export const OfficeWorkerDashboard: React.FC = () => {
             </div>
 
             {/* Mobile Pagination */}
-            {filteredPayments.length > 0 && (
+            {totalPaymentRecords > 0 && (
               <div className="md:hidden p-3 border-t border-slate-800 bg-slate-900">
                 <Pagination
                   currentPage={currentPage}
-                  totalRecords={filteredPayments.length}
+                  totalRecords={totalPaymentRecords}
                   pageSize={pageSize}
                   onPageChange={setCurrentPage}
                   onPageSizeChange={setPageSize}

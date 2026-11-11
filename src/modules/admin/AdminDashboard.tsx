@@ -1,10 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../core/api/client';
 import {
   PaymentRequest,
   SiteProfitabilityDto,
-  User,
   ExpenseCategory,
   Site,
   LabourerDto,
@@ -12,8 +11,11 @@ import {
   GenerateUserRequest,
   GenerateUserResponse,
   ApprovePaymentDto,
-  CategoryBreakdown
+  PagedPaymentsResponse,
+  PagedLabourersResponse,
+  PagedUsersResponse
 } from '../../core/types';
+import { useDebouncedValue } from '../../core/hooks/useDebouncedValue';
 import { ExpensePieChart } from '../../components/ExpensePieChart';
 import { SitePieChart } from '../../components/SitePieChart';
 import { LabourerAuditModal } from '../../components/LabourerAuditModal';
@@ -21,6 +23,8 @@ import { SiteExpensesModal } from '../../components/SiteExpensesModal';
 import { PeriodAccessModal } from '../../components/PeriodAccessModal';
 import { InitiatePaymentModal } from '../../components/InitiatePaymentModal';
 import { EditLabourerModal } from '../../components/EditLabourerModal';
+import { ApproveExpenseModal } from '../../components/ApproveExpenseModal';
+import { AmountBreakdown } from '../../components/AmountBreakdown';
 import { Pagination } from '../../components/Pagination';
 import { TableShimmer, CardShimmer } from '../../components/ShimmerLoader';
 import { QuarterFilterBar } from '../../components/QuarterFilterBar';
@@ -75,10 +79,6 @@ export const AdminDashboard: React.FC = () => {
   const [copiedCreds, setCopiedCreds] = useState(false);
 
   const [showApproveModalPayment, setShowApproveModalPayment] = useState<PaymentRequest | null>(null);
-  const [approveComments, setApproveComments] = useState('');
-  const [approveCategoryMode, setApproveCategoryMode] = useState<'existing' | 'new'>('existing');
-  const [approveSelectedCategory, setApproveSelectedCategory] = useState('');
-  const [approveNewCategoryName, setApproveNewCategoryName] = useState('');
 
   const [showRequestInfoModalPayment, setShowRequestInfoModalPayment] = useState<PaymentRequest | null>(null);
   const [requestInfoQuestions, setRequestInfoQuestions] = useState('');
@@ -127,16 +127,51 @@ export const AdminDashboard: React.FC = () => {
   const [newUserRole, setNewUserRole] = useState<'Admin' | 'Accountant' | 'Supervisor' | 'OfficeWorker'>('Supervisor');
   const [newUserDept, setNewUserDept] = useState('Site Operations');
 
-  // Queries
-  const { data: payments = [], isLoading: paymentsLoading } = useQuery<PaymentRequest[]>({
-    queryKey: ['payments', selectedYear, statusFilter, startDate, endDate, selectedSiteFilter],
+  // Server-Side Pagination States (Default 20 items per page)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(20);
+  const [labourersPage, setLabourersPage] = useState<number>(1);
+  const [labourersPageSize, setLabourersPageSize] = useState<number>(20);
+  const [employeesPage, setEmployeesPage] = useState<number>(1);
+  const [employeesPageSize, setEmployeesPageSize] = useState<number>(20);
+
+  const debouncedSearchFilter = useDebouncedValue(searchFilter, 300);
+
+  // Auto-reset pagination to page 1 whenever backend filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedYear, statusFilter, startDate, endDate, selectedCategoryFilter, selectedSiteFilter, debouncedSearchFilter, pageSize]);
+
+  useEffect(() => {
+    setLabourersPage(1);
+  }, [selectedLabourerSiteFilter, selectedLabourerSupervisorFilter, labourersPageSize]);
+
+  // Queries (Server-Side Filtered & Paginated)
+  const { data: paymentsData, isLoading: paymentsLoading } = useQuery<PagedPaymentsResponse>({
+    queryKey: [
+      'payments',
+      selectedYear,
+      statusFilter,
+      startDate,
+      endDate,
+      selectedSiteFilter,
+      selectedCategoryFilter,
+      debouncedSearchFilter,
+      currentPage,
+      pageSize,
+    ],
     queryFn: async () => {
-      let url = `/payments?year=${selectedYear}`;
-      if (statusFilter) url += `&status=${statusFilter}`;
-      if (startDate) url += `&startDate=${startDate}`;
-      if (endDate) url += `&endDate=${endDate}`;
-      if (selectedSiteFilter) url += `&siteId=${selectedSiteFilter}`;
-      const res = await apiClient.get<PaymentRequest[]>(url);
+      const params = new URLSearchParams();
+      params.append('year', String(selectedYear));
+      params.append('page', String(currentPage));
+      params.append('pageSize', String(pageSize));
+      if (statusFilter) params.append('status', statusFilter);
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+      if (selectedSiteFilter) params.append('siteId', selectedSiteFilter);
+      if (selectedCategoryFilter) params.append('category', selectedCategoryFilter);
+      if (debouncedSearchFilter.trim()) params.append('search', debouncedSearchFilter.trim());
+      const res = await apiClient.get<PagedPaymentsResponse>(`/payments?${params.toString()}`);
       return res.data;
     },
   });
@@ -156,23 +191,45 @@ export const AdminDashboard: React.FC = () => {
     },
   });
 
-  const { data: rawUsers = [] } = useQuery<User[]>({
-    queryKey: ['users'],
+  const { data: usersData, isLoading: usersLoading } = useQuery<PagedUsersResponse>({
+    queryKey: ['users', employeesPage, employeesPageSize],
     queryFn: async () => {
-      const res = await apiClient.get<User[]>('/users');
+      const params = new URLSearchParams();
+      params.append('page', String(employeesPage));
+      params.append('pageSize', String(employeesPageSize));
+      const res = await apiClient.get<PagedUsersResponse>(`/users?${params.toString()}`);
       return res.data;
     },
   });
 
-  // Admin should not see himself in employees list
-  const users = useMemo(() => {
-    return rawUsers.filter(u => u.id !== user?.userId && (user?.email ? u.email !== user.email : true));
-  }, [rawUsers, user]);
-
-  const { data: labourers = [] } = useQuery<LabourerDto[]>({
-    queryKey: ['labourers'],
+  // Lightweight supervisor lookup for dropdowns
+  const { data: supervisorsDropdownData } = useQuery<PagedUsersResponse>({
+    queryKey: ['users-supervisors-all'],
     queryFn: async () => {
-      const res = await apiClient.get<LabourerDto[]>('/labourers');
+      const res = await apiClient.get<PagedUsersResponse>('/users?role=Supervisor&all=true');
+      return res.data;
+    },
+  });
+
+  const paginatedUsers = usersData?.items || [];
+  const totalUsersCount = usersData?.totalCount ?? 0;
+  const supervisors = supervisorsDropdownData?.items || [];
+
+  const { data: labourersData, isLoading: labourersLoading } = useQuery<PagedLabourersResponse>({
+    queryKey: [
+      'labourers',
+      selectedLabourerSiteFilter,
+      selectedLabourerSupervisorFilter,
+      labourersPage,
+      labourersPageSize,
+    ],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.append('page', String(labourersPage));
+      params.append('pageSize', String(labourersPageSize));
+      if (selectedLabourerSiteFilter) params.append('siteId', selectedLabourerSiteFilter);
+      if (selectedLabourerSupervisorFilter) params.append('supervisorId', selectedLabourerSupervisorFilter);
+      const res = await apiClient.get<PagedLabourersResponse>(`/labourers?${params.toString()}`);
       return res.data;
     },
   });
@@ -209,6 +266,7 @@ export const AdminDashboard: React.FC = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['users-supervisors-all'] });
       setGeneratedUserCreds(data);
       setShowGenerateUserModal(false);
       setNewUserFullName('');
@@ -223,6 +281,7 @@ export const AdminDashboard: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['users-supervisors-all'] });
     },
   });
 
@@ -232,6 +291,7 @@ export const AdminDashboard: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['users-supervisors-all'] });
     },
   });
 
@@ -245,8 +305,6 @@ export const AdminDashboard: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       queryClient.invalidateQueries({ queryKey: ['sites-profitability'] });
       setShowApproveModalPayment(null);
-      setApproveComments('');
-      setApproveNewCategoryName('');
     },
   });
 
@@ -403,107 +461,23 @@ export const AdminDashboard: React.FC = () => {
     },
   });
 
-  // Totals calculated from filtered payments list
-  const totalApproved = (payments || [])
-    .filter((p) => p.status === 'Approved' || (p.status as any) === 'Completed')
-    .reduce((sum, p) => sum + (p.amount || 0), 0);
+  // Server-computed KPI totals and category breakdowns across all matching rows
+  const paymentSummary = paymentsData?.summary;
+  const totalApproved =
+    (paymentSummary?.totalApprovedAmount ?? 0) + (paymentSummary?.totalCompletedAmount ?? 0);
+  const totalPending = paymentSummary?.totalPendingAmount ?? 0;
+  const totalInfoRequested = paymentSummary?.totalInfoRequestedAmount ?? 0;
+  const periodGrandTotal = paymentSummary?.grandTotalAmount ?? 0;
 
-  const totalPending = (payments || [])
-    .filter((p) => p.status === 'Pending')
-    .reduce((sum, p) => sum + (p.amount || 0), 0);
+  const paginatedPayments = paymentsData?.items || [];
+  const totalPaymentRecords = paymentsData?.totalCount ?? 0;
 
-  const totalInfoRequested = (payments || [])
-    .filter((p) => p.status === 'InfoRequested')
-    .reduce((sum, p) => sum + (p.amount || 0), 0);
+  const paginatedLabourers = labourersData?.items || [];
+  const totalLabourersCount = labourersData?.totalCount ?? 0;
+  const labourerSummary = labourersData?.summary;
 
-  const periodGrandTotal = (payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
-
-  const filteredPayments = (payments || []).filter((p) => {
-    if (selectedCategoryFilter && p.category !== selectedCategoryFilter) return false;
-    if (!searchFilter) return true;
-    const q = searchFilter.toLowerCase();
-    return (
-      (p.title || '').toLowerCase().includes(q) ||
-      (p.submitterName || '').toLowerCase().includes(q) ||
-      (p.category || '').toLowerCase().includes(q) ||
-      (p.submitterPhone && p.submitterPhone.includes(q))
-    );
-  });
-
-  // Master Ledger Pagination State (Default 20 items per page)
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(20);
-
-  // Auto-reset pagination to page 1 whenever filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedYear, statusFilter, startDate, endDate, selectedCategoryFilter, selectedSiteFilter, searchFilter]);
-
-  const totalPaymentRecords = filteredPayments.length;
-  const paginatedPayments = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredPayments.slice(start, start + pageSize);
-  }, [filteredPayments, currentPage, pageSize]);
-
-  // Labourers Management Pagination & Filtering
-  const [labourersPage, setLabourersPage] = useState<number>(1);
-  const [labourersPageSize, setLabourersPageSize] = useState<number>(20);
-
-  useEffect(() => {
-    setLabourersPage(1);
-  }, [selectedLabourerSiteFilter, selectedLabourerSupervisorFilter]);
-
-  const filteredLabourers = useMemo(() => {
-    return labourers.filter((l) => {
-      if (selectedLabourerSiteFilter && l.siteId !== selectedLabourerSiteFilter && l.siteName !== selectedLabourerSiteFilter) return false;
-      if (selectedLabourerSupervisorFilter && l.supervisorId !== selectedLabourerSupervisorFilter) return false;
-      return true;
-    });
-  }, [labourers, selectedLabourerSiteFilter, selectedLabourerSupervisorFilter]);
-
-  const paginatedLabourers = useMemo(() => {
-    const start = (labourersPage - 1) * labourersPageSize;
-    return filteredLabourers.slice(start, start + labourersPageSize);
-  }, [filteredLabourers, labourersPage, labourersPageSize]);
-
-  // Employees Roster Pagination
-  const [employeesPage, setEmployeesPage] = useState<number>(1);
-  const [employeesPageSize, setEmployeesPageSize] = useState<number>(20);
-
-  const paginatedUsers = useMemo(() => {
-    const start = (employeesPage - 1) * employeesPageSize;
-    return users.slice(start, start + employeesPageSize);
-  }, [users, employeesPage, employeesPageSize]);
-
-  // Dynamically calculate Category Breakdowns according to active statusFilter:
-  // e.g. Pending shows only Pending, Approved shows only Approved, Completed shows only Completed.
-  const pieCategoryBreakdowns: CategoryBreakdown[] = useMemo(() => {
-    let target = payments;
-    if (statusFilter) {
-      target = payments.filter((p) => p.status === statusFilter);
-    } else {
-      const approvedOrCompleted = payments.filter(
-        (p) => p.status === 'Approved' || (p.status as any) === 'Completed'
-      );
-      target = approvedOrCompleted.length > 0 ? approvedOrCompleted : payments;
-    }
-
-    const map = new Map<string, { totalAmount: number; count: number }>();
-    target.forEach((p) => {
-      const cat = p.category || 'General';
-      const curr = map.get(cat) || { totalAmount: 0, count: 0 };
-      map.set(cat, {
-        totalAmount: curr.totalAmount + (p.amount || 0),
-        count: curr.count + 1,
-      });
-    });
-
-    return Array.from(map.entries()).map(([category, val]) => ({
-      category,
-      totalAmount: val.totalAmount,
-      count: val.count,
-    }));
-  }, [payments, statusFilter]);
+  // Backend dynamically computes CategoryBreakdowns according to active statusFilter
+  const pieCategoryBreakdowns = paymentSummary?.categoryBreakdowns || [];
 
   const handleCopyCredentials = () => {
     if (!generatedUserCreds) return;
@@ -723,7 +697,7 @@ export const AdminDashboard: React.FC = () => {
               ₹{periodGrandTotal.toLocaleString('en-IN')}
             </div>
             <span className="text-[11px] text-slate-500 block mt-0.5">
-              {filteredPayments.length} Claims Total
+              {totalPaymentRecords} Claims Total
             </span>
           </div>
 
@@ -805,7 +779,7 @@ export const AdminDashboard: React.FC = () => {
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60 sm:hover:bg-transparent'
             }`}
           >
-            Master Payment Ledger ({filteredPayments.length})
+            Master Payment Ledger ({totalPaymentRecords})
           </button>
           <button
             onClick={() => setActiveTab('profitability')}
@@ -825,7 +799,7 @@ export const AdminDashboard: React.FC = () => {
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60 sm:hover:bg-transparent'
             }`}
           >
-            Labourers & Wage Audit ({labourers.length})
+            Labourers & Wage Audit ({totalLabourersCount})
           </button>
           <button
             onClick={() => setActiveTab('employees')}
@@ -835,7 +809,7 @@ export const AdminDashboard: React.FC = () => {
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60 sm:hover:bg-transparent'
             }`}
           >
-            Employee Roster & Deep-Dive ({users.length})
+            Employee Roster & Deep-Dive ({totalUsersCount})
           </button>
           <button
             onClick={() => setActiveTab('sites_categories')}
@@ -885,7 +859,7 @@ export const AdminDashboard: React.FC = () => {
           <div className="space-y-3.5 md:hidden">
             {paymentsLoading ? (
               <CardShimmer count={4} />
-            ) : filteredPayments.length === 0 ? (
+            ) : paginatedPayments.length === 0 ? (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-400">
                 No payment requests found for the selected calendar period.
               </div>
@@ -932,9 +906,13 @@ export const AdminDashboard: React.FC = () => {
 
                     {/* Amount & Title */}
                     <div>
-                      <div className="text-2xl font-black font-mono text-white">
-                        ₹{(p.amount || 0).toLocaleString('en-IN')}
-                      </div>
+                      <AmountBreakdown
+                        amount={p.amount}
+                        requestedAmount={p.requestedAmount}
+                        approvedAmount={p.approvedAmount}
+                        status={p.status}
+                        variant="card"
+                      />
                       <div className="text-sm font-bold text-white mt-1 leading-snug">{p.title}</div>
                       {p.description && (
                         <p className="text-xs text-slate-400 mt-1 line-clamp-2">{p.description}</p>
@@ -1023,10 +1001,8 @@ export const AdminDashboard: React.FC = () => {
                         ) : (
                           <button
                             onClick={() => {
+                              approveMutation.reset();
                               setShowApproveModalPayment(p);
-                              setApproveSelectedCategory(p.categoryId || '');
-                              setApproveNewCategoryName('');
-                              setApproveComments('');
                             }}
                             className="w-full py-2.5 px-3 min-h-[44px] bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs shadow-md flex items-center justify-center transition-colors"
                           >
@@ -1096,7 +1072,7 @@ export const AdminDashboard: React.FC = () => {
               <tbody className="divide-y divide-slate-800/60 text-slate-200">
                 {paymentsLoading ? (
                   <TableShimmer rows={6} cols={7} hasActions={true} />
-                ) : filteredPayments.length === 0 ? (
+                ) : paginatedPayments.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="py-8 text-center text-slate-400">
                       No payment requests found for the selected calendar period.
@@ -1191,8 +1167,14 @@ export const AdminDashboard: React.FC = () => {
                           )}
                         </td>
 
-                        <td className="py-3 px-4 font-mono font-bold text-white text-base">
-                          ₹{(p.amount || 0).toLocaleString('en-IN')}
+                        <td className="py-3 px-4">
+                          <AmountBreakdown
+                            amount={p.amount}
+                            requestedAmount={p.requestedAmount}
+                            approvedAmount={p.approvedAmount}
+                            status={p.status}
+                            variant="table"
+                          />
                         </td>
 
                         <td className="py-3 px-4">
@@ -1241,10 +1223,8 @@ export const AdminDashboard: React.FC = () => {
                             ) : (
                               <button
                                 onClick={() => {
+                                  approveMutation.reset();
                                   setShowApproveModalPayment(p);
-                                  setApproveSelectedCategory(p.categoryId || '');
-                                  setApproveNewCategoryName('');
-                                  setApproveComments('');
                                 }}
                                 className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs shadow transition-colors"
                               >
@@ -1284,7 +1264,7 @@ export const AdminDashboard: React.FC = () => {
             </table>
 
             {/* Pagination Controls for Master Ledger Table */}
-            {!paymentsLoading && filteredPayments.length > 0 && (
+            {!paymentsLoading && totalPaymentRecords > 0 && (
               <div className="p-4 bg-slate-950/40 border-t border-slate-800">
                 <Pagination
                   currentPage={currentPage}
@@ -1465,14 +1445,14 @@ export const AdminDashboard: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow">
               <span className="text-xs font-semibold text-slate-400 uppercase block">Registered Labourers</span>
-              <div className="mt-1 text-2xl font-black text-white font-mono">{labourers.length} Workers</div>
-              <span className="text-[11px] text-slate-500 block mt-0.5">Across all sites</span>
+              <div className="mt-1 text-2xl font-black text-white font-mono">{labourerSummary?.totalCount ?? totalLabourersCount} Workers</div>
+              <span className="text-[11px] text-slate-500 block mt-0.5">Across filtered sites</span>
             </div>
 
             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow">
               <span className="text-xs font-semibold text-slate-400 uppercase block">Total Wages Claimed</span>
               <div className="mt-1 text-2xl font-black text-amber-300 font-mono">
-                ₹{labourers.reduce((s, l) => s + (l.totalWagesClaimed || 0), 0).toLocaleString('en-IN')}
+                ₹{(labourerSummary?.totalClaimedPayouts ?? 0).toLocaleString('en-IN')}
               </div>
               <span className="text-[11px] text-slate-500 block mt-0.5">By supervisors</span>
             </div>
@@ -1480,7 +1460,7 @@ export const AdminDashboard: React.FC = () => {
             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow">
               <span className="text-xs font-semibold text-slate-400 uppercase block">Approved Payouts</span>
               <div className="mt-1 text-2xl font-black text-emerald-400 font-mono">
-                ₹{labourers.reduce((s, l) => s + (l.totalWagesApproved || 0), 0).toLocaleString('en-IN')}
+                ₹{(labourerSummary?.totalApprovedPayouts ?? 0).toLocaleString('en-IN')}
               </div>
               <span className="text-[11px] text-slate-500 block mt-0.5">Disbursed to workers</span>
             </div>
@@ -1488,10 +1468,10 @@ export const AdminDashboard: React.FC = () => {
             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow">
               <span className="text-xs font-semibold text-slate-400 uppercase block">Active Worker Roster</span>
               <div className="mt-1 text-2xl font-black text-blue-300 font-mono">
-                {labourers.filter((l) => l.isActive).length} Active
+                {labourerSummary?.activeCount ?? 0} Active
               </div>
               <span className="text-[11px] text-slate-500 block mt-0.5">
-                {labourers.filter((l) => !l.isActive).length} Deactivated
+                {labourerSummary?.inactiveCount ?? 0} Deactivated
               </span>
             </div>
           </div>
@@ -1507,7 +1487,7 @@ export const AdminDashboard: React.FC = () => {
                   onChange={(e) => setSelectedLabourerSiteFilter(e.target.value)}
                   className="bg-slate-800 border border-slate-700 text-white rounded-lg px-2.5 py-1 text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
                 >
-                  <option value="">All Project Sites ({labourers.length})</option>
+                  <option value="">All Project Sites ({totalLabourersCount})</option>
                   {sites.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}
@@ -1525,7 +1505,7 @@ export const AdminDashboard: React.FC = () => {
                   className="bg-slate-800 border border-slate-700 text-white rounded-lg px-2.5 py-1 text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
                 >
                   <option value="">All Supervisors</option>
-                  {users.filter((u) => u.role === 'Supervisor').map((s) => (
+                  {supervisors.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.fullName} ({s.sixDigitUserId})
                     </option>
@@ -1548,13 +1528,15 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             <span className="text-xs text-slate-400 font-mono self-end sm:self-auto">
-              Showing {filteredLabourers.length} of {labourers.length} Workers
+              Showing {paginatedLabourers.length} of {totalLabourersCount} Workers
             </span>
           </div>
 
           {/* LABOURERS MOBILE CARD GRID (Phone view < md) */}
           <div className="grid grid-cols-1 gap-3 md:hidden">
-            {filteredLabourers.length === 0 ? (
+            {labourersLoading ? (
+              <CardShimmer count={4} />
+            ) : paginatedLabourers.length === 0 ? (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center text-slate-400 text-xs">
                 No labourers found matching the selected site/supervisor filters.
               </div>
@@ -1660,11 +1642,11 @@ export const AdminDashboard: React.FC = () => {
           </div>
 
           {/* Labourers Mobile Pagination */}
-          {filteredLabourers.length > 0 && (
+          {!labourersLoading && totalLabourersCount > 0 && (
             <div className="md:hidden bg-slate-900 border border-slate-800 rounded-2xl p-3">
               <Pagination
                 currentPage={labourersPage}
-                totalRecords={filteredLabourers.length}
+                totalRecords={totalLabourersCount}
                 pageSize={labourersPageSize}
                 onPageChange={setLabourersPage}
                 onPageSizeChange={setLabourersPageSize}
@@ -1688,7 +1670,9 @@ export const AdminDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-slate-200">
-                {filteredLabourers.length === 0 ? (
+                {labourersLoading ? (
+                  <TableShimmer rows={6} cols={6} hasActions={true} />
+                ) : paginatedLabourers.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-8 text-center text-slate-400 text-xs">
                       No labourers found matching the selected site/supervisor filters.
@@ -1821,11 +1805,11 @@ export const AdminDashboard: React.FC = () => {
             </table>
 
             {/* Pagination Controls for Labourers Table */}
-            {filteredLabourers.length > 0 && (
+            {!labourersLoading && totalLabourersCount > 0 && (
               <div className="p-4 bg-slate-950/40 border-t border-slate-800">
                 <Pagination
                   currentPage={labourersPage}
-                  totalRecords={filteredLabourers.length}
+                  totalRecords={totalLabourersCount}
                   pageSize={labourersPageSize}
                   onPageChange={setLabourersPage}
                   onPageSizeChange={setLabourersPageSize}
@@ -1859,7 +1843,14 @@ export const AdminDashboard: React.FC = () => {
 
           {/* EMPLOYEES MOBILE CARD GRID (Phone view < md) */}
           <div className="grid grid-cols-1 gap-3 md:hidden">
-            {paginatedUsers.map((u) => (
+            {usersLoading ? (
+              <CardShimmer count={4} />
+            ) : paginatedUsers.length === 0 ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center text-slate-400 text-xs">
+                No employees found.
+              </div>
+            ) : (
+              paginatedUsers.map((u) => (
               <div key={u.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow space-y-3">
                 <div className="flex items-start justify-between">
                   <div>
@@ -1932,15 +1923,16 @@ export const AdminDashboard: React.FC = () => {
                   </button>
                 </div>
               </div>
-            ))}
+              ))
+            )}
           </div>
 
           {/* Employees Mobile Pagination */}
-          {users.length > 0 && (
+          {!usersLoading && totalUsersCount > 0 && (
             <div className="md:hidden bg-slate-900 border border-slate-800 rounded-2xl p-3">
               <Pagination
                 currentPage={employeesPage}
-                totalRecords={users.length}
+                totalRecords={totalUsersCount}
                 pageSize={employeesPageSize}
                 onPageChange={setEmployeesPage}
                 onPageSizeChange={setEmployeesPageSize}
@@ -1964,7 +1956,16 @@ export const AdminDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-slate-200">
-                {paginatedUsers.map((u) => (
+                {usersLoading ? (
+                  <TableShimmer rows={6} cols={6} hasActions={true} />
+                ) : paginatedUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-slate-400 text-xs">
+                      No employees found.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedUsers.map((u) => (
                   <tr key={u.id} className="hover:bg-slate-800/40 transition-colors">
                     <td className="py-3 px-4">
                       {/* Clickable Employee Name opens full page */}
@@ -2060,16 +2061,16 @@ export const AdminDashboard: React.FC = () => {
                       </button>
                     </td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
 
             {/* Pagination Controls for Employees Roster */}
-            {users.length > 0 && (
+            {!usersLoading && totalUsersCount > 0 && (
               <div className="p-4 bg-slate-950/40 border-t border-slate-800">
                 <Pagination
                   currentPage={employeesPage}
-                  totalRecords={users.length}
+                  totalRecords={totalUsersCount}
                   pageSize={employeesPageSize}
                   onPageChange={setEmployeesPage}
                   onPageSizeChange={setEmployeesPageSize}
@@ -2328,147 +2329,26 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL: APPROVE & DYNAMIC RE-CATEGORIZATION */}
+      {/* MODAL: APPROVE, EDIT AMOUNT & DESCRIPTION, AND CATEGORIZE */}
       {showApproveModalPayment && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-white">Approve & Categorize Expense</h3>
-                <p className="text-xs text-slate-400">
-                  {showApproveModalPayment.title} - ₹{(showApproveModalPayment.amount || 0).toLocaleString('en-IN')}
-                </p>
-              </div>
-              <button onClick={() => setShowApproveModalPayment(null)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-                  Categorization Strategy
-                </label>
-                <div className="flex space-x-3 text-xs font-medium">
-                  <button
-                    type="button"
-                    onClick={() => setApproveCategoryMode('existing')}
-                    className={`px-3 py-1.5 rounded-lg border ${
-                      approveCategoryMode === 'existing'
-                        ? 'border-amber-500 bg-amber-500/10 text-amber-300'
-                        : 'border-slate-700 text-slate-400'
-                    }`}
-                  >
-                    Select Existing Category
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setApproveCategoryMode('new')}
-                    className={`px-3 py-1.5 rounded-lg border ${
-                      approveCategoryMode === 'new'
-                        ? 'border-amber-500 bg-amber-500/10 text-amber-300'
-                        : 'border-slate-700 text-slate-400'
-                    }`}
-                  >
-                    Type New Category (Auto-Save)
-                  </button>
-                </div>
-              </div>
-
-              {approveCategoryMode === 'existing' ? (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-                    Select Category
-                  </label>
-                  <select
-                    value={approveSelectedCategory}
-                    onChange={(e) => setApproveSelectedCategory(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  >
-                    <option value="">Keep current ({showApproveModalPayment.category})</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-                    New Category Name (e.g. "Sariya - Grade Fe550")
-                  </label>
-                  <input
-                    type="text"
-                    value={approveNewCategoryName}
-                    onChange={(e) => setApproveNewCategoryName(e.target.value)}
-                    placeholder="Enter new category name..."
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                  <span className="text-[11px] text-slate-500 mt-0.5 block">
-                    Backend will automatically save this category to the database for future use.
-                  </span>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-                  Approval Comments / Verification Notes
-                </label>
-                <textarea
-                  rows={2}
-                  value={approveComments}
-                  onChange={(e) => setApproveComments(e.target.value)}
-                  placeholder="Verified quote with site engineer..."
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
-
-              {showApproveModalPayment.userId === user?.userId && (
-                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-xs text-amber-300 flex items-start space-x-2">
-                  <ShieldCheck className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
-                  <span>
-                    <strong>Peer Review Required:</strong> You initiated this payment claim. In our 4-admin setup, you cannot approve your own request; one of the other 3 Admins must review and approve it.
-                  </span>
-                </div>
-              )}
-
-              <div className="pt-2 flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowApproveModalPayment(null)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={approveMutation.isPending || showApproveModalPayment.userId === user?.userId}
-                  onClick={() => {
-                    approveMutation.mutate({
-                      paymentId: showApproveModalPayment.id,
-                      dto: {
-                        version: showApproveModalPayment.version,
-                        comments: approveComments || 'Approved by Admin',
-                        overrideCategoryId:
-                          approveCategoryMode === 'existing' && approveSelectedCategory
-                            ? approveSelectedCategory
-                            : undefined,
-                        newCategoryName:
-                          approveCategoryMode === 'new' && approveNewCategoryName
-                            ? approveNewCategoryName
-                            : undefined,
-                      },
-                    });
-                  }}
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-sm shadow transition-colors disabled:opacity-50"
-                >
-                  {approveMutation.isPending ? 'Processing...' : 'Confirm Approval'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ApproveExpenseModal
+          key={showApproveModalPayment.id}
+          payment={showApproveModalPayment}
+          categories={categories}
+          currentUserId={user?.userId}
+          isPending={approveMutation.isPending}
+          defaultComment="Approved by Admin"
+          serverError={
+            (approveMutation.error as any)?.response?.data?.detail ||
+            (approveMutation.error as any)?.response?.data?.message ||
+            (approveMutation.error as Error | null)?.message
+          }
+          onClose={() => {
+            approveMutation.reset();
+            setShowApproveModalPayment(null);
+          }}
+          onConfirm={(paymentId, dto) => approveMutation.mutate({ paymentId, dto })}
+        />
       )}
 
       {/* MODAL: ADMIN REQUEST MORE DETAILS */}
@@ -2880,8 +2760,8 @@ export const AdminDashboard: React.FC = () => {
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                 >
                   <option value="">-- Choose Active Supervisor --</option>
-                  {users
-                    .filter((u) => u.isActive && (u.role === 'Supervisor' || u.role === 'Admin'))
+                  {supervisors
+                    .filter((u) => u.isActive)
                     .map((u) => (
                       <option key={u.id} value={u.id}>
                         {u.fullName} ({u.role}) • {u.phoneNumber}
