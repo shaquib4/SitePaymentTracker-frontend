@@ -1,6 +1,6 @@
 # KEPaymentTracker — Comprehensive System & Agent Handover Document
 
-> **Document Version:** 3.3  
+> **Document Version:** 3.4  
 > **Last Updated:** November 2026  
 > **Company / Tenant:** **Khan Enterprises**  
 > **Codebase Paths:**  
@@ -26,6 +26,7 @@
 6. **Multi-Identifier Field Login & Optional Email**: Supervisors and site staff can log in using either their email address or a unique **6-digit User ID** (e.g. `521402`, `616244`, `400004`). Email is strictly optional for all non-admin employees.
 7. **Dedicated Office Worker Role**: Office workers can independently submit claims (travel, supplies, utilities) and track personal historical payments with multi-year period filters, while being strictly isolated from company-wide financials.
 8. **Direct Site View Approvals**: Admins can inspect and approve payment claims directly inside the dedicated Project Site view without switching to the master ledger.
+9. **High-Performance Pagination & Shimmer UI (v3.4)**: Limits display to 20 records per page by default across all dashboards to eliminate DOM lag on annual filters, with animated shimmer loading placeholders and calendar quarter filters.
 
 ---
 
@@ -130,7 +131,25 @@ All test accounts use the default password: **`Password123!`**
   - Added visual error boundaries and `isError` retry buttons to the mobile card grid and desktop table view.
   - Guidance modal detects iOS and Google App in-app webview: provides clear instructions to open in Safari and tap **"Add to Home Screen"** (`[+]`).
 
-### 4.4. Mobile Layout & Date Picker Sizing
+### 4.5. High-Performance Pagination & Shimmer UI Engine (v3.4)
+- **Modular Reusable Pagination Component (`Pagination.tsx`)**:
+  - Implements a standard limit of **20 records per page (default)** across Master Payment Ledger, Labourers Roster, Employees Management, Dedicated Site Expenses Ledger, Dedicated Employee Expenses Page, Accountant Ledger, and Office Worker Dashboard.
+  - Page size selector (`10`, `20`, `50`, `100` records per page).
+  - Compact, touch-friendly UI showing `Showing X to Y of Z records`, First, Prev, windowed page numbers (`1 ... 4 [5] 6 ... 10`), Next, and Last buttons.
+  - Dynamic color theme accents: `'amber'` (Admin), `'emerald'` (Accountant), `'blue'` (Office Worker / Site).
+  - Automatic `useEffect` state reset to page 1 whenever search, date ranges, categories, or status filters change.
+- **Strict Separation of Render Pagination vs Summary Totals**:
+  - Financial metric cards (Grand Totals, Approved, Pending Queue, Info Requested) and Pie Chart category breakdowns calculate across the **entire filtered dataset** (e.g. all 365 days of the year), ensuring 100% financial audit accuracy while rendering only the sliced 20 items to DOM.
+- **Dark-Mode Wave Shimmer Skeletons (`ShimmerLoader.tsx` & `src/index.css`)**:
+  - Replaces plain-text loading spinners with animated wave skeleton components (`.shimmer-wave` gradient sweep).
+  - `TableShimmer`: Pulsing multi-column skeleton rows matching exact desktop table column geometries and action buttons.
+  - `CardShimmer`: Pulsing skeleton cards for mobile viewports showing headers, badge chips, amounts, and duration bars.
+- **Calendar Quarter & Date Presets (`QuarterFilterBar.tsx` & `quarterUtils.ts`)**:
+  - Provides quick-selector pills for `Full Year`, `Q1: Jan-Mar`, `Q2: Apr-Jun`, `Q3: Jul-Sep`, `Q4: Oct-Dec`, `Last Quarter`, `Last 30 Days`, and `Reset`.
+  - Smart Quarter calculation with year rollover: When in Q1, clicking "Last Quarter" automatically calculates Q4 of the previous year.
+  - Visual active state pill indication and verification sub-bar (`Active Range: YYYY-MM-DD → YYYY-MM-DD`).
+
+### 4.6. Mobile Layout & Date Picker Sizing
 - Date pickers styled across all dashboards with `min-height: 42px !important; height: 42px !important; [color-scheme: dark]` to match button and dropdown heights on iOS Safari and Chrome.
 - Top tab headers use `.horizontal-scroll-container` with `whitespace-nowrap flex-shrink-0` for smooth swipeable navigation.
 
@@ -170,12 +189,16 @@ src/
 ├── components/
 │   ├── Navbar.tsx                     # Branding, Cyan Office Worker badge, Install PWA trigger
 │   ├── LoginPage.tsx                  # Email / 6-digit ID login + quick-role switcher
+│   ├── Pagination.tsx                 # Modular pagination component (default 20 records/page)
+│   ├── QuarterFilterBar.tsx           # Calendar quarter selector pills (Full Year, Q1-Q4, Last Quarter)
+│   ├── ShimmerLoader.tsx              # Dark-mode animated skeleton rows and mobile cards
 │   ├── SiteExpensesModal.tsx          # Dedicated Site Expense Ledger + Admin Approval Workflow
 │   ├── ExpensePieChart.tsx            # Spend category distribution chart
 │   ├── InstallPwaModal.tsx            # Safari / Chrome home-screen install instructions
 │   └── InitiatePaymentModal.tsx       # Expense claim modal with dynamic category selector
 ├── core/
 │   ├── types/index.ts                 # TS models (UserRole, SiteExpenseItemDto with version)
+│   ├── utils/quarterUtils.ts          # Smart quarter ranges & rollover logic
 │   └── auth/AuthContext.tsx           # Authentication state & role routing
 └── modules/
     ├── admin/AdminDashboard.tsx       # Master ledger, Sites & Profitability, User generator

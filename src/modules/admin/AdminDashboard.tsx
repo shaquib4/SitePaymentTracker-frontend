@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../core/api/client';
 import {
@@ -21,6 +21,9 @@ import { SiteExpensesModal } from '../../components/SiteExpensesModal';
 import { PeriodAccessModal } from '../../components/PeriodAccessModal';
 import { InitiatePaymentModal } from '../../components/InitiatePaymentModal';
 import { EditLabourerModal } from '../../components/EditLabourerModal';
+import { Pagination } from '../../components/Pagination';
+import { TableShimmer, CardShimmer } from '../../components/ShimmerLoader';
+import { QuarterFilterBar } from '../../components/QuarterFilterBar';
 import { useAuth } from '../../core/auth/AuthContext';
 import { EmployeeExpensesView } from './EmployeeExpensesView';
 import {
@@ -123,20 +126,6 @@ export const AdminDashboard: React.FC = () => {
   const [newUserPhone, setNewUserPhone] = useState('');
   const [newUserRole, setNewUserRole] = useState<'Admin' | 'Accountant' | 'Supervisor' | 'OfficeWorker'>('Supervisor');
   const [newUserDept, setNewUserDept] = useState('Site Operations');
-
-  // Quick preset helper (User requirement: only Full Year & Last 30 Days, with custom calendar period pickers)
-  const setPreset = (preset: 'all' | 'last_30_days') => {
-    const today = new Date();
-    if (preset === 'all') {
-      setStartDate('');
-      setEndDate('');
-    } else if (preset === 'last_30_days') {
-      const past = new Date();
-      past.setDate(past.getDate() - 30);
-      setStartDate(past.toISOString().split('T')[0]);
-      setEndDate(today.toISOString().split('T')[0]);
-    }
-  };
 
   // Queries
   const { data: payments = [], isLoading: paymentsLoading } = useQuery<PaymentRequest[]>({
@@ -441,6 +430,51 @@ export const AdminDashboard: React.FC = () => {
     );
   });
 
+  // Master Ledger Pagination State (Default 20 items per page)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(20);
+
+  // Auto-reset pagination to page 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedYear, statusFilter, startDate, endDate, selectedCategoryFilter, selectedSiteFilter, searchFilter]);
+
+  const totalPaymentRecords = filteredPayments.length;
+  const paginatedPayments = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredPayments.slice(start, start + pageSize);
+  }, [filteredPayments, currentPage, pageSize]);
+
+  // Labourers Management Pagination & Filtering
+  const [labourersPage, setLabourersPage] = useState<number>(1);
+  const [labourersPageSize, setLabourersPageSize] = useState<number>(20);
+
+  useEffect(() => {
+    setLabourersPage(1);
+  }, [selectedLabourerSiteFilter, selectedLabourerSupervisorFilter]);
+
+  const filteredLabourers = useMemo(() => {
+    return labourers.filter((l) => {
+      if (selectedLabourerSiteFilter && l.siteId !== selectedLabourerSiteFilter && l.siteName !== selectedLabourerSiteFilter) return false;
+      if (selectedLabourerSupervisorFilter && l.supervisorId !== selectedLabourerSupervisorFilter) return false;
+      return true;
+    });
+  }, [labourers, selectedLabourerSiteFilter, selectedLabourerSupervisorFilter]);
+
+  const paginatedLabourers = useMemo(() => {
+    const start = (labourersPage - 1) * labourersPageSize;
+    return filteredLabourers.slice(start, start + labourersPageSize);
+  }, [filteredLabourers, labourersPage, labourersPageSize]);
+
+  // Employees Roster Pagination
+  const [employeesPage, setEmployeesPage] = useState<number>(1);
+  const [employeesPageSize, setEmployeesPageSize] = useState<number>(20);
+
+  const paginatedUsers = useMemo(() => {
+    const start = (employeesPage - 1) * employeesPageSize;
+    return users.slice(start, start + employeesPageSize);
+  }, [users, employeesPage, employeesPageSize]);
+
   // Dynamically calculate Category Breakdowns according to active statusFilter:
   // e.g. Pending shows only Pending, Approved shows only Approved, Completed shows only Completed.
   const pieCategoryBreakdowns: CategoryBreakdown[] = useMemo(() => {
@@ -589,35 +623,33 @@ export const AdminDashboard: React.FC = () => {
               </h3>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Select any specific calendar date range to audit total expenses, pie chart breakdown, and transactions
+              Select calendar year, quarters (Q1-Q4), last quarter, or custom date ranges to audit transactions
             </p>
           </div>
 
-          {/* Quick Presets (Only Full Year & Last 30 Days) */}
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPreset('all')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
-                !startDate && !endDate
-                  ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-md shadow-amber-500/20'
-                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-              }`}
-            >
-              Full Year {selectedYear}
-            </button>
-            <button
-              type="button"
-              onClick={() => setPreset('last_30_days')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
-                startDate && endDate
-                  ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-md shadow-amber-500/20'
-                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-              }`}
-            >
-              Last 30 Days
-            </button>
-          </div>
+          {/* Quarter & Rolling Period Presets */}
+          <QuarterFilterBar
+            year={selectedYear}
+            startDate={startDate}
+            endDate={endDate}
+            onChangeRange={(s, e, targetYear) => {
+              setStartDate(s);
+              setEndDate(e);
+              if (targetYear && targetYear !== selectedYear) {
+                setSelectedYear(targetYear);
+              }
+              setCurrentPage(1);
+            }}
+            onReset={() => {
+              setStartDate('');
+              setEndDate('');
+              setSelectedCategoryFilter(null);
+              setStatusFilter('');
+              setSearchFilter('');
+              setCurrentPage(1);
+            }}
+            themeColor="amber"
+          />
         </div>
 
         {/* Date Inputs */}
@@ -850,17 +882,17 @@ export const AdminDashboard: React.FC = () => {
           </div>
 
           {/* PAYMENTS MOBILE CARD GRID (Phone view < md) */}
-          <div className="grid grid-cols-1 gap-3.5 md:hidden">
+          <div className="space-y-3.5 md:hidden">
             {paymentsLoading ? (
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-400">
-                Loading payment requests...
-              </div>
+              <CardShimmer count={4} />
             ) : filteredPayments.length === 0 ? (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-400">
                 No payment requests found for the selected calendar period.
               </div>
             ) : (
-              filteredPayments.map((p) => {
+              <>
+                <div className="grid grid-cols-1 gap-3.5">
+                  {paginatedPayments.map((p) => {
                 const approvalLog = (p.auditLogs || []).find((a) => a.newStatus === 'Approved');
                 const isSelf = p.userId === user?.userId;
                 return (
@@ -1032,9 +1064,20 @@ export const AdminDashboard: React.FC = () => {
                     </div>
                   </div>
                 );
-              })
-            )}
-          </div>
+              })}
+            </div>
+            <Pagination
+              currentPage={currentPage}
+              totalRecords={totalPaymentRecords}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+              themeColor="amber"
+              recordLabel="payment claims"
+            />
+          </>
+        )}
+      </div>
 
           {/* DESKTOP TABLE VIEW (Visible on md and above) */}
           <div className="hidden md:block bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow">
@@ -1052,11 +1095,7 @@ export const AdminDashboard: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-slate-200">
                 {paymentsLoading ? (
-                  <tr>
-                    <td colSpan={7} className="py-8 text-center text-slate-400">
-                      Loading payment requests...
-                    </td>
-                  </tr>
+                  <TableShimmer rows={6} cols={7} hasActions={true} />
                 ) : filteredPayments.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="py-8 text-center text-slate-400">
@@ -1064,7 +1103,7 @@ export const AdminDashboard: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredPayments.map((p) => {
+                  paginatedPayments.map((p) => {
                     const approvalLog = (p.auditLogs || []).find((a) => a.newStatus === 'Approved');
                     return (
                       <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
@@ -1243,6 +1282,21 @@ export const AdminDashboard: React.FC = () => {
                 )}
               </tbody>
             </table>
+
+            {/* Pagination Controls for Master Ledger Table */}
+            {!paymentsLoading && filteredPayments.length > 0 && (
+              <div className="p-4 bg-slate-950/40 border-t border-slate-800">
+                <Pagination
+                  currentPage={currentPage}
+                  totalRecords={totalPaymentRecords}
+                  pageSize={pageSize}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={setPageSize}
+                  themeColor="amber"
+                  recordLabel="payment claims"
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1494,30 +1548,18 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             <span className="text-xs text-slate-400 font-mono self-end sm:self-auto">
-              Showing {labourers.filter((l) => {
-                if (selectedLabourerSiteFilter && l.siteId !== selectedLabourerSiteFilter && l.siteName !== selectedLabourerSiteFilter) return false;
-                if (selectedLabourerSupervisorFilter && l.supervisorId !== selectedLabourerSupervisorFilter) return false;
-                return true;
-              }).length} of {labourers.length} Workers
+              Showing {filteredLabourers.length} of {labourers.length} Workers
             </span>
           </div>
 
           {/* LABOURERS MOBILE CARD GRID (Phone view < md) */}
           <div className="grid grid-cols-1 gap-3 md:hidden">
-            {labourers.filter((l) => {
-              if (selectedLabourerSiteFilter && l.siteId !== selectedLabourerSiteFilter && l.siteName !== selectedLabourerSiteFilter) return false;
-              if (selectedLabourerSupervisorFilter && l.supervisorId !== selectedLabourerSupervisorFilter) return false;
-              return true;
-            }).length === 0 ? (
+            {filteredLabourers.length === 0 ? (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center text-slate-400 text-xs">
                 No labourers found matching the selected site/supervisor filters.
               </div>
             ) : (
-              labourers.filter((l) => {
-                if (selectedLabourerSiteFilter && l.siteId !== selectedLabourerSiteFilter && l.siteName !== selectedLabourerSiteFilter) return false;
-                if (selectedLabourerSupervisorFilter && l.supervisorId !== selectedLabourerSupervisorFilter) return false;
-                return true;
-              }).map((l) => (
+              paginatedLabourers.map((l) => (
                 <div key={l.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow space-y-3">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center space-x-3">
@@ -1617,6 +1659,21 @@ export const AdminDashboard: React.FC = () => {
             )}
           </div>
 
+          {/* Labourers Mobile Pagination */}
+          {filteredLabourers.length > 0 && (
+            <div className="md:hidden bg-slate-900 border border-slate-800 rounded-2xl p-3">
+              <Pagination
+                currentPage={labourersPage}
+                totalRecords={filteredLabourers.length}
+                pageSize={labourersPageSize}
+                onPageChange={setLabourersPage}
+                onPageSizeChange={setLabourersPageSize}
+                themeColor="amber"
+                recordLabel="labourers"
+              />
+            </div>
+          )}
+
           {/* DESKTOP TABLE VIEW (Visible on md and above) */}
           <div className="hidden md:block bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow">
             <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
@@ -1631,22 +1688,14 @@ export const AdminDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-slate-200">
-                {labourers.filter((l) => {
-                  if (selectedLabourerSiteFilter && l.siteId !== selectedLabourerSiteFilter && l.siteName !== selectedLabourerSiteFilter) return false;
-                  if (selectedLabourerSupervisorFilter && l.supervisorId !== selectedLabourerSupervisorFilter) return false;
-                  return true;
-                }).length === 0 ? (
+                {filteredLabourers.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-8 text-center text-slate-400 text-xs">
                       No labourers found matching the selected site/supervisor filters.
                     </td>
                   </tr>
                 ) : (
-                  labourers.filter((l) => {
-                    if (selectedLabourerSiteFilter && l.siteId !== selectedLabourerSiteFilter && l.siteName !== selectedLabourerSiteFilter) return false;
-                    if (selectedLabourerSupervisorFilter && l.supervisorId !== selectedLabourerSupervisorFilter) return false;
-                    return true;
-                  }).map((l) => (
+                  paginatedLabourers.map((l) => (
                     <tr key={l.id} className="hover:bg-slate-800/40 transition-colors">
                       <td className="py-3 px-4">
                         <div className="flex items-center space-x-3">
@@ -1770,6 +1819,21 @@ export const AdminDashboard: React.FC = () => {
                 )}
               </tbody>
             </table>
+
+            {/* Pagination Controls for Labourers Table */}
+            {filteredLabourers.length > 0 && (
+              <div className="p-4 bg-slate-950/40 border-t border-slate-800">
+                <Pagination
+                  currentPage={labourersPage}
+                  totalRecords={filteredLabourers.length}
+                  pageSize={labourersPageSize}
+                  onPageChange={setLabourersPage}
+                  onPageSizeChange={setLabourersPageSize}
+                  themeColor="amber"
+                  recordLabel="labourers"
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1795,7 +1859,7 @@ export const AdminDashboard: React.FC = () => {
 
           {/* EMPLOYEES MOBILE CARD GRID (Phone view < md) */}
           <div className="grid grid-cols-1 gap-3 md:hidden">
-            {users.map((u) => (
+            {paginatedUsers.map((u) => (
               <div key={u.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow space-y-3">
                 <div className="flex items-start justify-between">
                   <div>
@@ -1871,6 +1935,21 @@ export const AdminDashboard: React.FC = () => {
             ))}
           </div>
 
+          {/* Employees Mobile Pagination */}
+          {users.length > 0 && (
+            <div className="md:hidden bg-slate-900 border border-slate-800 rounded-2xl p-3">
+              <Pagination
+                currentPage={employeesPage}
+                totalRecords={users.length}
+                pageSize={employeesPageSize}
+                onPageChange={setEmployeesPage}
+                onPageSizeChange={setEmployeesPageSize}
+                themeColor="amber"
+                recordLabel="employees"
+              />
+            </div>
+          )}
+
           {/* DESKTOP TABLE VIEW (Visible on md and above) */}
           <div className="hidden md:block bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow">
             <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
@@ -1885,7 +1964,7 @@ export const AdminDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-slate-200">
-                {users.map((u) => (
+                {paginatedUsers.map((u) => (
                   <tr key={u.id} className="hover:bg-slate-800/40 transition-colors">
                     <td className="py-3 px-4">
                       {/* Clickable Employee Name opens full page */}
@@ -1984,6 +2063,21 @@ export const AdminDashboard: React.FC = () => {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination Controls for Employees Roster */}
+            {users.length > 0 && (
+              <div className="p-4 bg-slate-950/40 border-t border-slate-800">
+                <Pagination
+                  currentPage={employeesPage}
+                  totalRecords={users.length}
+                  pageSize={employeesPageSize}
+                  onPageChange={setEmployeesPage}
+                  onPageSizeChange={setEmployeesPageSize}
+                  themeColor="amber"
+                  recordLabel="employees"
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

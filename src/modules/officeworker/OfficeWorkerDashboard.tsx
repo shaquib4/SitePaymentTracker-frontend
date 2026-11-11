@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../core/auth/AuthContext';
 import { apiClient } from '../../core/api/client';
 import { PaymentRequest, UserHistoryResponse, CategoryBreakdown } from '../../core/types';
 import { InitiatePaymentModal } from '../../components/InitiatePaymentModal';
 import { ExpensePieChart } from '../../components/ExpensePieChart';
+import { Pagination } from '../../components/Pagination';
+import { TableShimmer, CardShimmer } from '../../components/ShimmerLoader';
+import { QuarterFilterBar } from '../../components/QuarterFilterBar';
 import {
   Briefcase,
   PlusCircle,
@@ -16,7 +19,6 @@ import {
   FileText,
   Search,
   TrendingUp,
-  RefreshCw,
   Coins
 } from 'lucide-react';
 
@@ -34,19 +36,14 @@ export const OfficeWorkerDashboard: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showInitiateModal, setShowInitiateModal] = useState<boolean>(false);
 
-  // Quick preset helper
-  const setPreset = (preset: 'all' | 'last_30_days') => {
-    if (preset === 'all') {
-      setStartDate('');
-      setEndDate('');
-    } else if (preset === 'last_30_days') {
-      const today = new Date();
-      const past = new Date();
-      past.setDate(past.getDate() - 30);
-      setStartDate(past.toISOString().split('T')[0]);
-      setEndDate(today.toISOString().split('T')[0]);
-    }
-  };
+  // Pagination state (default 20 items per page)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(20);
+
+  // Auto-reset to page 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedYear, startDate, endDate, statusFilter, categoryFilter, searchQuery]);
 
   const resetFilters = () => {
     setStartDate('');
@@ -100,6 +97,11 @@ export const OfficeWorkerDashboard: React.FC = () => {
     }
     return true;
   });
+
+  const paginatedPayments = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredPayments.slice(start, start + pageSize);
+  }, [filteredPayments, currentPage, pageSize]);
 
   // Calculate summary metrics strictly for themselves in the active period
   const totalClaimed = filteredPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
@@ -246,39 +248,19 @@ export const OfficeWorkerDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Period Preset Pills */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setPreset('all')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition ${
-              !startDate && !endDate
-                ? 'bg-amber-500 text-slate-950 shadow-md'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-            }`}
-          >
-            Full Year {selectedYear}
-          </button>
-          <button
-            type="button"
-            onClick={() => setPreset('last_30_days')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition ${
-              startDate && endDate
-                ? 'bg-amber-500 text-slate-950 shadow-md'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-            }`}
-          >
-            Last 30 Days
-          </button>
-          <button
-            type="button"
-            onClick={resetFilters}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition inline-flex items-center space-x-1"
-          >
-            <RefreshCw className="w-3 h-3" />
-            <span>Reset Filters</span>
-          </button>
-        </div>
+        {/* Calendar Quarter Presets */}
+        <QuarterFilterBar
+          startDate={startDate}
+          endDate={endDate}
+          year={selectedYear}
+          onSelectRange={(start, end) => {
+            setStartDate(start);
+            setEndDate(end);
+          }}
+          onReset={resetFilters}
+          allLabel={`Full Year ${selectedYear}`}
+          themeColor="blue"
+        />
 
         {/* Date Pickers & Category Dropdowns */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
@@ -443,9 +425,27 @@ export const OfficeWorkerDashboard: React.FC = () => {
         </div>
 
         {isLoading ? (
-          <div className="p-12 text-center text-slate-400 text-sm">
-            <RefreshCw className="w-6 h-6 animate-spin mx-auto text-amber-500 mb-2" />
-            Loading your expense records...
+          <div>
+            <div className="p-4 md:hidden">
+              <CardShimmer count={4} />
+            </div>
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-950/60 text-slate-400 uppercase tracking-wider text-[11px] border-b border-slate-800">
+                  <tr>
+                    <th className="py-3 px-4">Claim Title & Details</th>
+                    <th className="py-3 px-4">Category</th>
+                    <th className="py-3 px-4">Period Dates</th>
+                    <th className="py-3 px-4">Amount</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Approval Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  <TableShimmer rows={5} hasActions={false} />
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : filteredPayments.length === 0 ? (
           <div className="p-12 text-center text-slate-400 space-y-3">
@@ -473,7 +473,7 @@ export const OfficeWorkerDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {filteredPayments.map((p) => (
+                  {paginatedPayments.map((p) => (
                     <tr key={p.id} className="hover:bg-slate-800/40 transition">
                       <td className="py-3.5 px-4">
                         <div className="font-semibold text-white text-sm">{p.title}</div>
@@ -526,11 +526,26 @@ export const OfficeWorkerDashboard: React.FC = () => {
                   ))}
                 </tbody>
               </table>
+
+              {/* Desktop Pagination */}
+              {filteredPayments.length > 0 && (
+                <div className="p-4 bg-slate-950/40 border-t border-slate-800">
+                  <Pagination
+                    currentPage={currentPage}
+                    totalRecords={filteredPayments.length}
+                    pageSize={pageSize}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={setPageSize}
+                    themeColor="blue"
+                    recordLabel="claims"
+                  />
+                </div>
+              )}
             </div>
 
             {/* MOBILE CARD VIEW (visible on phone screens < md) */}
             <div className="md:hidden divide-y divide-slate-800">
-              {filteredPayments.map((p) => (
+              {paginatedPayments.map((p) => (
                 <div key={p.id} className="p-4 space-y-2.5">
                   <div className="flex items-start justify-between">
                     <div>
@@ -568,6 +583,21 @@ export const OfficeWorkerDashboard: React.FC = () => {
                 </div>
               ))}
             </div>
+
+            {/* Mobile Pagination */}
+            {filteredPayments.length > 0 && (
+              <div className="md:hidden p-3 border-t border-slate-800 bg-slate-900">
+                <Pagination
+                  currentPage={currentPage}
+                  totalRecords={filteredPayments.length}
+                  pageSize={pageSize}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={setPageSize}
+                  themeColor="blue"
+                  recordLabel="claims"
+                />
+              </div>
+            )}
           </>
         )}
       </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../core/api/client';
 import {
@@ -10,6 +10,9 @@ import {
 } from '../core/types';
 import { useAuth } from '../core/auth/AuthContext';
 import { ExpensePieChart } from './ExpensePieChart';
+import { Pagination } from './Pagination';
+import { TableShimmer, CardShimmer } from './ShimmerLoader';
+import { QuarterFilterBar } from './QuarterFilterBar';
 import {
   ArrowLeft,
   Building2,
@@ -22,7 +25,6 @@ import {
   Clock,
   AlertCircle,
   XCircle,
-  RefreshCw,
   X,
   HelpCircle,
   ShieldCheck
@@ -67,6 +69,15 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
+
+  // Pagination state (default 20 items per page)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(20);
+
+  // Auto-reset to page 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [startDate, endDate, categoryFilter, statusFilter, searchFilter]);
 
   // Modals for Admin Approval & Clarification Requests
   const [showApproveModalPayment, setShowApproveModalPayment] = useState<SiteExpenseItemDto | null>(null);
@@ -165,20 +176,6 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
     },
   });
 
-  // Quick preset helper
-  const setPreset = (preset: 'all' | 'last_30_days') => {
-    const today = new Date();
-    if (preset === 'all') {
-      setStartDate('');
-      setEndDate('');
-    } else if (preset === 'last_30_days') {
-      const past = new Date();
-      past.setDate(past.getDate() - 30);
-      setStartDate(past.toISOString().split('T')[0]);
-      setEndDate(today.toISOString().split('T')[0]);
-    }
-  };
-
   const resetFilters = () => {
     setStartDate('');
     setEndDate('');
@@ -203,6 +200,11 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
     }
     return true;
   });
+
+  const paginatedExpenses = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredExpenses.slice(start, start + pageSize);
+  }, [filteredExpenses, currentPage, pageSize]);
 
   // Period totals
   const totalPeriodApproved = filteredExpenses
@@ -406,39 +408,18 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
           </div>
         </div>
 
-        {/* Filter Presets */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setPreset('all')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
-              !startDate && !endDate
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-            }`}
-          >
-            All Site Records
-          </button>
-          <button
-            type="button"
-            onClick={() => setPreset('last_30_days')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
-              startDate && endDate
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-            }`}
-          >
-            Last 30 Days
-          </button>
-          <button
-            type="button"
-            onClick={resetFilters}
-            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl text-xs font-semibold border border-slate-700 transition inline-flex items-center space-x-1.5"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Reset Filters</span>
-          </button>
-        </div>
+        {/* Quarter & Date Presets */}
+        <QuarterFilterBar
+          startDate={startDate}
+          endDate={endDate}
+          onSelectRange={(start, end) => {
+            setStartDate(start);
+            setEndDate(end);
+          }}
+          onReset={resetFilters}
+          allLabel="All Site Records"
+          themeColor="blue"
+        />
 
         {/* Date Pickers & Category Controls */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
@@ -599,9 +580,7 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
         {/* MOBILE CARD GRID (Phone view < md) */}
         <div className="grid grid-cols-1 gap-3.5 md:hidden">
           {isLoading ? (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-400">
-              Loading site expenses...
-            </div>
+            <CardShimmer count={4} />
           ) : isError ? (
             <div className="bg-slate-900 border border-rose-800/40 rounded-2xl p-8 text-center text-rose-300 space-y-2">
               <p className="font-semibold text-sm">Failed to load site expenses.</p>
@@ -618,7 +597,7 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
               No expense records found for this site in the selected period.
             </div>
           ) : (
-            filteredExpenses.map((item) => (
+            paginatedExpenses.map((item) => (
               <div key={item.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-3">
                 {/* Header: Category & Worker Pills + Status */}
                 <div className="flex items-start justify-between gap-2">
@@ -774,6 +753,21 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
           )}
         </div>
 
+        {/* Site Expenses Mobile Pagination */}
+        {filteredExpenses.length > 0 && (
+          <div className="md:hidden bg-slate-900 border border-slate-800 rounded-2xl p-3">
+            <Pagination
+              currentPage={currentPage}
+              totalRecords={filteredExpenses.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+              themeColor="blue"
+              recordLabel="expenses"
+            />
+          </div>
+        )}
+
         {/* DESKTOP TABLE VIEW (Visible on md and above) */}
         <div className="hidden md:block bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow">
           <table className="min-w-full divide-y divide-slate-800 text-left text-xs">
@@ -791,11 +785,7 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-800/60 text-slate-200">
               {isLoading ? (
-                <tr>
-                  <td colSpan={isAdmin ? 8 : 7} className="py-10 text-center text-slate-400">
-                    Loading site expenses...
-                  </td>
-                </tr>
+                <TableShimmer rows={6} hasActions={isAdmin} />
               ) : isError ? (
                 <tr>
                   <td colSpan={isAdmin ? 8 : 7} className="py-10 text-center text-rose-300">
@@ -816,7 +806,7 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredExpenses.map((item) => (
+                paginatedExpenses.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-800/40 transition">
                     <td className="py-3.5 px-4">
                       <div className="font-bold text-white text-sm">{item.title}</div>
@@ -957,6 +947,21 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
               )}
             </tbody>
           </table>
+
+          {/* Desktop Pagination */}
+          {filteredExpenses.length > 0 && (
+            <div className="p-4 bg-slate-950/40 border-t border-slate-800">
+              <Pagination
+                currentPage={currentPage}
+                totalRecords={filteredExpenses.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+                themeColor="blue"
+                recordLabel="expenses"
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

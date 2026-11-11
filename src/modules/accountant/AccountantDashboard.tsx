@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../core/api/client';
 import {
@@ -13,6 +13,9 @@ import { SitePieChart } from '../../components/SitePieChart';
 import { PeriodAccessModal } from '../../components/PeriodAccessModal';
 import { SiteExpensesModal } from '../../components/SiteExpensesModal';
 import { InitiatePaymentModal } from '../../components/InitiatePaymentModal';
+import { Pagination } from '../../components/Pagination';
+import { TableShimmer, CardShimmer } from '../../components/ShimmerLoader';
+import { QuarterFilterBar } from '../../components/QuarterFilterBar';
 import { useAuth } from '../../core/auth/AuthContext';
 import {
   FileSpreadsheet,
@@ -43,6 +46,10 @@ export const AccountantDashboard: React.FC = () => {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
 
+  // Pagination State (Default 20 items per page)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(20);
+
   // Modals
   const [infoModalPayment, setInfoModalPayment] = useState<PaymentRequest | null>(null);
   const [questions, setQuestions] = useState('');
@@ -52,20 +59,6 @@ export const AccountantDashboard: React.FC = () => {
   // Export State
   const [exporting, setExporting] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
-
-  // Quick preset helper (User requirement: only Full Year & Last 30 Days, with custom calendar period pickers)
-  const setPreset = (preset: 'all' | 'last_30_days') => {
-    const today = new Date();
-    if (preset === 'all') {
-      setStartDate('');
-      setEndDate('');
-    } else if (preset === 'last_30_days') {
-      const past = new Date();
-      past.setDate(past.getDate() - 30);
-      setStartDate(past.toISOString().split('T')[0]);
-      setEndDate(today.toISOString().split('T')[0]);
-    }
-  };
 
   // Queries
   const { data: accessibleYears = [2026] } = useQuery<number[]>({
@@ -206,6 +199,16 @@ export const AccountantDashboard: React.FC = () => {
     claimsCount: s.expenseClaimsCount,
   }));
 
+  // Auto-reset pagination to page 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedYear, statusFilter, startDate, endDate, selectedCategoryFilter, selectedSiteFilter, searchFilter, ledgerMode]);
+
+  const paginatedPayments = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredPayments.slice(start, start + pageSize);
+  }, [filteredPayments, currentPage, pageSize]);
+
   if (viewingSiteProfitability) {
     return (
       <SiteExpensesModal
@@ -312,31 +315,26 @@ export const AccountantDashboard: React.FC = () => {
             </p>
           </div>
 
-          {/* Quick Presets (Only Full Year & Last 30 Days) */}
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPreset('all')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
-                !startDate && !endDate
-                  ? 'bg-emerald-500 text-slate-950 border-emerald-500 shadow-md shadow-emerald-500/20'
-                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-              }`}
-            >
-              Full Year {selectedYear}
-            </button>
-            <button
-              type="button"
-              onClick={() => setPreset('last_30_days')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
-                startDate && endDate
-                  ? 'bg-emerald-500 text-slate-950 border-emerald-500 shadow-md shadow-emerald-500/20'
-                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-              }`}
-            >
-              Last 30 Days
-            </button>
-          </div>
+          {/* Calendar Quarter Presets */}
+          <QuarterFilterBar
+            startDate={startDate}
+            endDate={endDate}
+            year={selectedYear}
+            onSelectRange={(start, end) => {
+              setStartDate(start);
+              setEndDate(end);
+            }}
+            onReset={() => {
+              setStartDate('');
+              setEndDate('');
+              setSelectedCategoryFilter(null);
+              setSelectedSiteFilter(null);
+              setStatusFilter('');
+              setSearchFilter('');
+            }}
+            allLabel={`Full Year ${selectedYear}`}
+            themeColor="emerald"
+          />
         </div>
 
         {/* Date Inputs */}
@@ -543,15 +541,13 @@ export const AccountantDashboard: React.FC = () => {
         {/* MOBILE CARD GRID (Phone view < md) */}
         <div className="grid grid-cols-1 gap-3.5 md:hidden">
           {isLoading ? (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-400">
-              Loading ledger for {selectedYear}...
-            </div>
+            <CardShimmer count={4} />
           ) : filteredPayments.length === 0 ? (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-400">
               No payment requests found for the selected period.
             </div>
           ) : (
-            filteredPayments.map((p) => (
+            paginatedPayments.map((p) => (
               <div key={p.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -665,6 +661,21 @@ export const AccountantDashboard: React.FC = () => {
           )}
         </div>
 
+        {/* Accountant Ledger Mobile Pagination */}
+        {filteredPayments.length > 0 && (
+          <div className="md:hidden bg-slate-900 border border-slate-800 rounded-2xl p-3">
+            <Pagination
+              currentPage={currentPage}
+              totalRecords={filteredPayments.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+              themeColor="emerald"
+              recordLabel="payments"
+            />
+          </div>
+        )}
+
         {/* DESKTOP TABLE VIEW (Visible on md and above) */}
         <div className="hidden md:block bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow">
           <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
@@ -681,11 +692,7 @@ export const AccountantDashboard: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-800/60 text-slate-200">
               {isLoading ? (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400">
-                    Loading ledger for {selectedYear}...
-                  </td>
-                </tr>
+                <TableShimmer rows={6} hasActions={true} />
               ) : filteredPayments.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-slate-400">
@@ -693,7 +700,7 @@ export const AccountantDashboard: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredPayments.map((p) => (
+                paginatedPayments.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
                     <td className="py-3 px-4">
                       <div className="font-semibold text-white">{p.title}</div>
@@ -792,6 +799,21 @@ export const AccountantDashboard: React.FC = () => {
               )}
             </tbody>
           </table>
+
+          {/* Accountant Desktop Pagination */}
+          {filteredPayments.length > 0 && (
+            <div className="p-4 bg-slate-950/40 border-t border-slate-800">
+              <Pagination
+                currentPage={currentPage}
+                totalRecords={filteredPayments.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+                themeColor="emerald"
+                recordLabel="payments"
+              />
+            </div>
+          )}
         </div>
       </div>
 

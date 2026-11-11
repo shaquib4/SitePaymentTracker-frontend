@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../core/api/client';
 import { UserHistoryResponse, UserHistoryItem, Site } from '../../core/types';
 import { ExpensePieChart } from '../../components/ExpensePieChart';
+import { Pagination } from '../../components/Pagination';
+import { TableShimmer, CardShimmer } from '../../components/ShimmerLoader';
+import { QuarterFilterBar } from '../../components/QuarterFilterBar';
 import {
   ArrowLeft,
   Calendar,
@@ -32,6 +35,15 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
   const [searchFilter, setSearchFilter] = useState<string>('');
   const [selectedSiteFilter, setSelectedSiteFilter] = useState<string>('');
 
+  // Pagination state (default 20 items per page)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(20);
+
+  // Auto-reset to page 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [startDate, endDate, statusFilter, searchFilter, selectedSiteFilter]);
+
   // Query Project Sites
   const { data: sites = [] } = useQuery<Site[]>({
     queryKey: ['sites'],
@@ -40,20 +52,6 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
       return res.data;
     },
   });
-
-  // Quick preset helper (Simplified to Full Year & Last 30 Days)
-  const setPreset = (preset: 'all' | 'last_30_days') => {
-    const today = new Date();
-    if (preset === 'all') {
-      setStartDate('');
-      setEndDate('');
-    } else if (preset === 'last_30_days') {
-      const past = new Date();
-      past.setDate(past.getDate() - 30);
-      setStartDate(past.toISOString().split('T')[0]);
-      setEndDate(today.toISOString().split('T')[0]);
-    }
-  };
 
   // Query User History with Date Filtering
   const { data: userProfile, isLoading } = useQuery<UserHistoryResponse>({
@@ -86,6 +84,11 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
     }
     return true;
   });
+
+  const paginatedItems = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredItems.slice(start, start + pageSize);
+  }, [filteredItems, currentPage, pageSize]);
 
   // Calculate Category breakdown for this employee in this period (Strictly approved/completed only)
   const categoryMap = new Map<string, { total: number; count: number }>();
@@ -234,34 +237,28 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
                 </p>
               </div>
 
-              {/* Quick Presets */}
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPreset('all')}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
-                    !startDate && !endDate
-                      ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-md shadow-amber-500/20'
-                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-                  }`}
-                >
-                  All Year ({year})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreset('last_30_days')}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
-                    startDate && endDate
-                      ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-md shadow-amber-500/20'
-                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-                  }`}
-                >
-                  Last 30 Days
-                </button>
-              </div>
-            </div>
+            {/* Quick Presets */}
+            <QuarterFilterBar
+              startDate={startDate}
+              endDate={endDate}
+              year={year}
+              onSelectRange={(start, end) => {
+                setStartDate(start);
+                setEndDate(end);
+              }}
+              onReset={() => {
+                setStartDate('');
+                setEndDate('');
+                setStatusFilter('');
+                setSearchFilter('');
+                setSelectedSiteFilter('');
+              }}
+              allLabel={`All Year (${year})`}
+              themeColor="amber"
+            />
+          </div>
 
-            {/* Date Pickers & Site Filter */}
+          {/* Date Pickers & Site Filter */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end pt-2 border-t border-slate-800/80">
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-1 flex items-center">
@@ -412,12 +409,14 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
 
             {/* Mobile Card Grid (Phone view < md) */}
             <div className="p-4 grid grid-cols-1 gap-3 md:hidden">
-              {filteredItems.length === 0 ? (
+              {isLoading ? (
+                <CardShimmer count={4} />
+              ) : filteredItems.length === 0 ? (
                 <div className="text-center py-6 text-slate-400 text-xs">
                   No expense records found for this employee in the selected period.
                 </div>
               ) : (
-                filteredItems.map((item) => (
+                paginatedItems.map((item) => (
                   <div key={item.id} className="bg-slate-950 border border-slate-800/80 rounded-xl p-3.5 space-y-2.5 shadow">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -484,6 +483,21 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
               )}
             </div>
 
+            {/* Mobile Pagination */}
+            {filteredItems.length > 0 && (
+              <div className="p-3 md:hidden border-t border-slate-800">
+                <Pagination
+                  currentPage={currentPage}
+                  totalRecords={filteredItems.length}
+                  pageSize={pageSize}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={setPageSize}
+                  themeColor="amber"
+                  recordLabel="expenses"
+                />
+              </div>
+            )}
+
             {/* Desktop Table View (md and above) */}
             <div className="hidden md:block">
               <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
@@ -498,14 +512,16 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-slate-200">
-                {filteredItems.length === 0 ? (
+                {isLoading ? (
+                  <TableShimmer rows={5} hasActions={false} />
+                ) : filteredItems.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-8 text-center text-slate-400 text-xs">
                       No expense records found for this employee in the selected period.
                     </td>
                   </tr>
                 ) : (
-                  filteredItems.map((item) => (
+                  paginatedItems.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-800/40 transition-colors">
                       <td className="py-3 px-4">
                         <span className="font-semibold text-white block">{item.title}</span>
@@ -598,6 +614,21 @@ export const EmployeeExpensesView: React.FC<EmployeeExpensesViewProps> = ({
                 )}
               </tbody>
             </table>
+
+            {/* Desktop Pagination */}
+            {filteredItems.length > 0 && (
+              <div className="p-4 bg-slate-950/40 border-t border-slate-800">
+                <Pagination
+                  currentPage={currentPage}
+                  totalRecords={filteredItems.length}
+                  pageSize={pageSize}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={setPageSize}
+                  themeColor="amber"
+                  recordLabel="expenses"
+                />
+              </div>
+            )}
           </div>
         </div>
       </>

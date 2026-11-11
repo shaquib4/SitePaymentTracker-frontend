@@ -70,4 +70,25 @@
   .horizontal-scroll-container::-webkit-scrollbar-thumb:hover {
     background: #f59e0b;
   }
+
+  /* Shimmer Loading Wave Animation */
+  @keyframes shimmer-sweep {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  .shimmer-wave {
+    background: linear-gradient(
+      90deg,
+      rgba(30, 41, 59, 0.7) 0%,
+      rgba(71, 85, 105, 0.45) 50%,
+      rgba(30, 41, 59, 0.7) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer-sweep 1.8s infinite ease-in-out;
+  }
 }
