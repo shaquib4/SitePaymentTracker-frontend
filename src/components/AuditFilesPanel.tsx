@@ -130,11 +130,18 @@ export const AuditFilesPanel: React.FC<AuditFilesPanelProps> = ({
             }`}
           >
             <Mail className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            <div>
-              <strong className="font-bold">
-                Mail Delivery Status ({emailStatus.provider}):{' '}
-              </strong>
-              <span>{emailStatus.message}</span>
+            <div className="space-y-1">
+              <div>
+                <strong className="font-bold">
+                  Mail Delivery Status ({emailStatus.provider}):{' '}
+                </strong>
+                <span>{emailStatus.message}</span>
+              </div>
+              {!emailStatus.isConfigured && (
+                <p className="text-[11px] text-amber-200/80">
+                  Quick Gmail setup in Render Env Vars: set <code className="bg-slate-950 px-1 py-0.5 rounded">Email__SmtpHost=smtp.gmail.com</code>, <code className="bg-slate-950 px-1 py-0.5 rounded">Email__SmtpPort=587</code>, <code className="bg-slate-950 px-1 py-0.5 rounded">Email__SmtpUser=yourgmail</code>, and a 16-char Gmail App Password in <code className="bg-slate-950 px-1 py-0.5 rounded">Email__SmtpPassword</code> (or set <code className="bg-slate-950 px-1 py-0.5 rounded">Email__ResendApiKey</code>).
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -173,6 +180,16 @@ export const AuditFilesPanel: React.FC<AuditFilesPanelProps> = ({
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-bold text-white text-sm">{file.reportTitle}</span>
                     {renderStatusBadge(file.statusName)}
+                    {file.statusName === 'Completed' && !file.hasPdf && !file.hasExcel && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-800 text-emerald-300 border border-emerald-500/30">
+                        Cleared from DB (Metadata Saved)
+                      </span>
+                    )}
+                    {file.statusName === 'Completed' && (file.hasPdf !== file.hasExcel) && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-800 text-amber-300 border border-amber-500/30">
+                        {file.hasPdf ? 'Excel Deleted from DB' : 'PDF Deleted from DB'}
+                      </span>
+                    )}
                     <span className="text-[11px] font-mono text-amber-300 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
                       {file.periodLabel}
                     </span>
@@ -266,7 +283,7 @@ export const AuditFilesPanel: React.FC<AuditFilesPanelProps> = ({
                     {file.hasPdf
                       ? 'Breakdown PDF'
                       : file.pdfDownloadedAtUtc
-                        ? 'PDF Cleared'
+                        ? 'PDF Deleted (DB)'
                         : 'Breakdown PDF'}
                     {file.hasPdf && <Download className="w-3 h-3 ml-1.5 opacity-80" />}
                   </button>
@@ -290,7 +307,7 @@ export const AuditFilesPanel: React.FC<AuditFilesPanelProps> = ({
                     {file.hasExcel
                       ? 'Expenses Excel'
                       : file.excelDownloadedAtUtc
-                        ? 'Excel Cleared'
+                        ? 'Excel Deleted (DB)'
                         : 'Expenses Excel'}
                     {file.hasExcel && <Download className="w-3 h-3 ml-1.5 opacity-80" />}
                   </button>

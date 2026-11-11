@@ -497,6 +497,7 @@ export interface AdminAuditPackRequest {
   status?: string;
   category?: string;
   siteId?: string;
+  employeeId?: string;
   search?: string;
   recipientEmail?: string;
   reportTitle?: string;
@@ -521,6 +522,8 @@ export interface AuditReportJobItem {
   categoryFilter?: string;
   siteId?: string;
   siteName?: string;
+  employeeId?: string | null;
+  employeeName?: string | null;
   searchFilter?: string;
   status: string | number;
   statusName: 'Queued' | 'Processing' | 'Completed' | 'Failed' | string;

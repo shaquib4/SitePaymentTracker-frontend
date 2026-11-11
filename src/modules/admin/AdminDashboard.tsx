@@ -74,6 +74,7 @@ export const AdminDashboard: React.FC = () => {
   const [endDate, setEndDate] = useState<string>('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
   const [selectedSiteFilter, setSelectedSiteFilter] = useState<string | null>(null);
+  const [selectedEmployeeFilter, setSelectedEmployeeFilter] = useState<string>('');
 
   // Dedicated Employee View State
   const [viewingEmployeeId, setViewingEmployeeId] = useState<string | null>(null);
@@ -138,6 +139,7 @@ export const AdminDashboard: React.FC = () => {
       status: statusFilter || undefined,
       category: selectedCategoryFilter || undefined,
       siteId: selectedSiteFilter || undefined,
+      employeeId: selectedEmployeeFilter || undefined,
       search: debouncedSearchFilter.trim() || undefined,
       recipientEmail: recipientEmailOverride.trim() || undefined,
     });
@@ -177,7 +179,7 @@ export const AdminDashboard: React.FC = () => {
   // Auto-reset pagination to page 1 whenever backend filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedYear, statusFilter, startDate, endDate, selectedCategoryFilter, selectedSiteFilter, debouncedSearchFilter, pageSize]);
+  }, [selectedYear, statusFilter, startDate, endDate, selectedCategoryFilter, selectedSiteFilter, selectedEmployeeFilter, debouncedSearchFilter, pageSize]);
 
   useEffect(() => {
     setLabourersPage(1);
@@ -193,6 +195,7 @@ export const AdminDashboard: React.FC = () => {
       endDate,
       selectedSiteFilter,
       selectedCategoryFilter,
+      selectedEmployeeFilter,
       debouncedSearchFilter,
       currentPage,
       pageSize,
@@ -207,6 +210,7 @@ export const AdminDashboard: React.FC = () => {
       if (endDate) params.append('endDate', endDate);
       if (selectedSiteFilter) params.append('siteId', selectedSiteFilter);
       if (selectedCategoryFilter) params.append('category', selectedCategoryFilter);
+      if (selectedEmployeeFilter) params.append('requesterId', selectedEmployeeFilter);
       if (debouncedSearchFilter.trim()) params.append('search', debouncedSearchFilter.trim());
       const res = await apiClient.get<PagedPaymentsResponse>(`/payments?${params.toString()}`);
       return res.data;
@@ -239,7 +243,7 @@ export const AdminDashboard: React.FC = () => {
     },
   });
 
-  // Lightweight supervisor lookup for dropdowns
+  // Lightweight supervisor + employee lookups for dropdowns
   const { data: supervisorsDropdownData } = useQuery<PagedUsersResponse>({
     queryKey: ['users-supervisors-all'],
     queryFn: async () => {
@@ -248,9 +252,18 @@ export const AdminDashboard: React.FC = () => {
     },
   });
 
+  const { data: employeesDropdownData } = useQuery<PagedUsersResponse>({
+    queryKey: ['users-employees-all'],
+    queryFn: async () => {
+      const res = await apiClient.get<PagedUsersResponse>('/users?all=true');
+      return res.data;
+    },
+  });
+
   const paginatedUsers = usersData?.items || [];
   const totalUsersCount = usersData?.totalCount ?? 0;
   const supervisors = supervisorsDropdownData?.items || [];
+  const allEmployees = employeesDropdownData?.items || [];
 
   const { data: labourersData, isLoading: labourersLoading } = useQuery<PagedLabourersResponse>({
     queryKey: [
@@ -671,6 +684,7 @@ export const AdminDashboard: React.FC = () => {
               setEndDate('');
               setSelectedCategoryFilter(null);
               setStatusFilter('');
+              setSelectedEmployeeFilter('');
               setSearchFilter('');
               setCurrentPage(1);
             }}
@@ -730,6 +744,7 @@ export const AdminDashboard: React.FC = () => {
                 setEndDate('');
                 setSelectedCategoryFilter(null);
                 setStatusFilter('');
+                setSelectedEmployeeFilter('');
                 setSearchFilter('');
               }}
               className="w-full h-[42px] flex items-center justify-center min-w-0 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg text-sm border border-slate-700 transition-colors"
@@ -966,11 +981,26 @@ export const AdminDashboard: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center space-x-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                value={selectedEmployeeFilter}
+                onChange={(e) => setSelectedEmployeeFilter(e.target.value)}
+                className="bg-slate-900 border border-slate-800 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                title="Filter ledger & Excel audit export by employee"
+              >
+                <option value="">All Employees</option>
+                {allEmployees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.fullName} ({emp.role})
+                  </option>
+                ))}
+              </select>
+
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="bg-slate-900 border border-slate-800 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                title="Filter ledger & Excel audit export by status"
               >
                 <option value="">All Statuses</option>
                 <option value="Pending">Pending</option>

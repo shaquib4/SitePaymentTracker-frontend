@@ -142,15 +142,28 @@ export function useAdminAuditReports(enabled: boolean) {
         link.remove();
         window.URL.revokeObjectURL(url);
 
-        // Binary was purged from Postgres immediately after download; refresh metadata list
-        queryClient.invalidateQueries({ queryKey: ['admin-audit-files'] });
+        // Immediately reflect DB binary purge in UI cache, then confirm with fresh server state
+        const nowIso = new Date().toISOString();
+        queryClient.setQueryData<AuditReportJobItem[]>(['admin-audit-files'], (prev) =>
+          Array.isArray(prev)
+            ? prev.map((item) =>
+                item.id === jobId
+                  ? format === 'pdf'
+                    ? { ...item, hasPdf: false, pdfDownloadedAtUtc: nowIso }
+                    : { ...item, hasExcel: false, excelDownloadedAtUtc: nowIso }
+                  : item
+              )
+            : prev
+        );
+        await queryClient.invalidateQueries({ queryKey: ['admin-audit-files'] });
+
         setBannerMessage({
           type: 'success',
-          text: `Downloaded "${fileName}". Binary cleared from server DB to save space — click Regenerate anytime to rebuild it.`,
+          text: `Downloaded "${fileName}". Binary deleted from DB to save space — click Regenerate anytime to rebuild it.`,
         });
       } catch (err: any) {
-        queryClient.invalidateQueries({ queryKey: ['admin-audit-files'] });
-        const status = err?.response?.status;
+        await queryClient.invalidateQueries({ queryKey: ['admin-audit-files'] });
+        const status = err?.status ?? err?.response?.status;
         if (status === 410) {
           setBannerMessage({
             type: 'error',
