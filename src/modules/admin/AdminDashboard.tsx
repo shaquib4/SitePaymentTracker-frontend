@@ -28,6 +28,8 @@ import { AmountBreakdown } from '../../components/AmountBreakdown';
 import { Pagination } from '../../components/Pagination';
 import { TableShimmer, CardShimmer } from '../../components/ShimmerLoader';
 import { QuarterFilterBar } from '../../components/QuarterFilterBar';
+import { AuditFilesPanel } from '../../components/AuditFilesPanel';
+import { useAdminAuditReports } from '../../core/hooks/useAdminAuditReports';
 import { useAuth } from '../../core/auth/AuthContext';
 import { EmployeeExpensesView } from './EmployeeExpensesView';
 import {
@@ -36,6 +38,9 @@ import {
   Phone,
   PlusCircle,
   FileSpreadsheet,
+  FileText,
+  FolderArchive,
+  Loader2,
   Trash2,
   UserX,
   History,
@@ -60,7 +65,7 @@ import {
 export const AdminDashboard: React.FC = () => {
   const queryClient = useQueryClient();
   const [selectedYear, setSelectedYear] = useState<number>(2026);
-  const [activeTab, setActiveTab] = useState<'ledger' | 'profitability' | 'labourers' | 'employees' | 'sites_categories'>('ledger');
+  const [activeTab, setActiveTab] = useState<'ledger' | 'profitability' | 'labourers' | 'employees' | 'sites_categories' | 'audit_files'>('ledger');
   const [searchFilter, setSearchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
 
@@ -103,8 +108,37 @@ export const AdminDashboard: React.FC = () => {
   const [settleContractValue, setSettleContractValue] = useState('');
   const [viewingSiteProfitability, setViewingSiteProfitability] = useState<SiteProfitabilityDto | null>(null);
 
-  // Labourers Management States
+  // Labourers Management & Admin Audit Reports States
   const { user } = useAuth();
+  const isAdminUser = user?.role === 'Admin';
+  const [recipientEmailOverride, setRecipientEmailOverride] = useState('');
+  const {
+    auditFiles,
+    isLoading: auditFilesLoading,
+    refetch: refetchAuditFiles,
+    activeJobsCount,
+    isQueueing: isQueueingAuditPack,
+    queueAuditPack,
+    deleteAuditFile,
+    downloadingKey,
+    downloadAuditFile,
+    bannerMessage: auditBanner,
+    clearBannerMessage: clearAuditBanner,
+  } = useAdminAuditReports(isAdminUser);
+
+  const handleTriggerAuditPack = () => {
+    if (!isAdminUser) return;
+    queueAuditPack({
+      year: selectedYear,
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
+      status: statusFilter || undefined,
+      category: selectedCategoryFilter || undefined,
+      siteId: selectedSiteFilter || undefined,
+      search: debouncedSearchFilter.trim() || undefined,
+      recipientEmail: recipientEmailOverride.trim() || undefined,
+    });
+  };
   const [showInitiatePaymentModal, setShowInitiatePaymentModal] = useState(false);
   const [editingLabourer, setEditingLabourer] = useState<LabourerDto | null>(null);
   const [selectedLabourerSiteFilter, setSelectedLabourerSiteFilter] = useState<string>('');
@@ -566,6 +600,21 @@ export const AdminDashboard: React.FC = () => {
             )}
           </button>
 
+          {isAdminUser && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('audit_files')}
+              className="relative inline-flex items-center px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-xl text-xs font-bold border border-slate-700 transition-colors"
+              title="View generated Breakdown PDF & Expenses Excel audit packs"
+            >
+              <FolderArchive className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
+              Audit Files ({auditFiles.length})
+              {activeJobsCount > 0 && (
+                <span className="ml-1.5 h-2 w-2 rounded-full bg-amber-400 animate-ping" />
+              )}
+            </button>
+          )}
+
           <div className="flex items-center space-x-2 bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-xl">
             <Calendar className="w-4 h-4 text-amber-400" />
             <label className="text-xs font-semibold text-slate-400 uppercase">Year:</label>
@@ -744,7 +793,7 @@ export const AdminDashboard: React.FC = () => {
 
       {/* INTERACTIVE EXPENSE PIE CHART */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-white tracking-tight">
               Expense Category Distribution {statusFilter ? `(${statusFilter} Only)` : '(Approved & Disbursed)'}
@@ -755,12 +804,70 @@ export const AdminDashboard: React.FC = () => {
                 : 'Breakdown of cleared & approved expenditures. Click any category slice to filter ledger records.'}
             </p>
           </div>
-          {statusFilter && (
-            <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-              Filter: {statusFilter}
-            </span>
-          )}
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            {statusFilter && (
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                Filter: {statusFilter}
+              </span>
+            )}
+            {isAdminUser && (
+              <>
+                <button
+                  type="button"
+                  disabled={isQueueingAuditPack}
+                  onClick={handleTriggerAuditPack}
+                  className="inline-flex items-center px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-slate-950 rounded-xl text-xs font-bold shadow transition-colors"
+                  title="Generate Breakdown-only PDF + Full Expenses Excel in background and send email with download links"
+                >
+                  {isQueueingAuditPack ? (
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <FileText className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  Breakdown PDF + Excel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('audit_files')}
+                  className="inline-flex items-center px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold border border-slate-700 transition-colors"
+                >
+                  <FolderArchive className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
+                  Files ({auditFiles.length})
+                </button>
+              </>
+            )}
+          </div>
         </div>
+        {isAdminUser && auditBanner && (
+          <div
+            className={`flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 rounded-xl text-xs border ${
+              auditBanner.type === 'success'
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+            }`}
+          >
+            <span>{auditBanner.text}</span>
+            <div className="flex items-center gap-2">
+              {auditBanner.type === 'success' && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('audit_files')}
+                  className="font-bold underline hover:text-white"
+                >
+                  Open Audit Files
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={clearAuditBanner}
+                className="text-slate-400 hover:text-white"
+                aria-label="Dismiss notification"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
         <ExpensePieChart
           categoryBreakdowns={pieCategoryBreakdowns}
           onSelectCategory={(cat) => setSelectedCategoryFilter(cat)}
@@ -819,8 +926,25 @@ export const AdminDashboard: React.FC = () => {
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60 sm:hover:bg-transparent'
             }`}
           >
-            Sites & Categories ({sites.length} Sites / {categories.length} Categories)
+            Sites &amp; Categories ({sites.length} Sites / {categories.length} Categories)
           </button>
+          {isAdminUser && (
+            <button
+              onClick={() => setActiveTab('audit_files')}
+              className={`whitespace-nowrap flex-shrink-0 px-3.5 py-2 rounded-xl sm:rounded-none sm:px-1 sm:pb-3 transition-colors flex items-center ${
+                activeTab === 'audit_files'
+                  ? 'text-amber-400 bg-amber-500/15 sm:bg-transparent sm:border-b-2 sm:border-amber-400 font-bold'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60 sm:hover:bg-transparent'
+              }`}
+            >
+              Audit Files ({auditFiles.length})
+              {activeJobsCount > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-amber-500 text-slate-950 animate-pulse">
+                  Running
+                </span>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -2140,6 +2264,21 @@ export const AdminDashboard: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* TAB 6: ADMIN AUDIT FILES (PDF BREAKDOWN + EXPENSES EXCEL) */}
+      {activeTab === 'audit_files' && isAdminUser && (
+        <AuditFilesPanel
+          auditFiles={auditFiles}
+          isLoading={auditFilesLoading}
+          onRefresh={() => refetchAuditFiles()}
+          onDownload={downloadAuditFile}
+          onDelete={(id) => deleteAuditFile(id)}
+          downloadingKey={downloadingKey}
+          recipientEmailOverride={recipientEmailOverride}
+          onChangeRecipientEmailOverride={setRecipientEmailOverride}
+          defaultAdminEmail={user?.email}
+        />
       )}
 
       {/* MODAL: GENERATE EMPLOYEE CREDENTIALS */}

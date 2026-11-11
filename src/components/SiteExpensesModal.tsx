@@ -16,11 +16,16 @@ import { TableShimmer, CardShimmer } from './ShimmerLoader';
 import { QuarterFilterBar } from './QuarterFilterBar';
 import { ApproveExpenseModal } from './ApproveExpenseModal';
 import { AmountBreakdown } from './AmountBreakdown';
+import { AuditFilesModal } from './AuditFilesPanel';
+import { useAdminAuditReports } from '../core/hooks/useAdminAuditReports';
 import {
   ArrowLeft,
   Building2,
   Calendar,
   FileSpreadsheet,
+  FileText,
+  FolderArchive,
+  Loader2,
   Coins,
   Search,
   Phone,
@@ -91,6 +96,38 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
 
   const [showCompleteModalPayment, setShowCompleteModalPayment] = useState<SiteExpenseItemDto | null>(null);
   const [completeComments, setCompleteComments] = useState('');
+
+  const canExportAudit = Boolean(isAdmin && user?.role === 'Admin');
+  const [showAuditFilesModal, setShowAuditFilesModal] = useState(false);
+  const [recipientEmailOverride, setRecipientEmailOverride] = useState('');
+  const {
+    auditFiles,
+    isLoading: auditFilesLoading,
+    refetch: refetchAuditFiles,
+    activeJobsCount,
+    isQueueing: isQueueingAuditPack,
+    queueAuditPack,
+    deleteAuditFile,
+    downloadingKey,
+    downloadAuditFile,
+    bannerMessage: auditBanner,
+    clearBannerMessage: clearAuditBanner,
+  } = useAdminAuditReports(canExportAudit);
+
+  const handleTriggerSiteAuditPack = () => {
+    if (!canExportAudit) return;
+    const inferredYear = Number((startDate || endDate || '').slice(0, 4)) || new Date().getFullYear();
+    queueAuditPack({
+      year: inferredYear,
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
+      status: statusFilter || undefined,
+      category: categoryFilter || undefined,
+      siteId: siteId || undefined,
+      search: debouncedSearchFilter.trim() || undefined,
+      recipientEmail: recipientEmailOverride.trim() || undefined,
+    });
+  };
 
   const handleBack = onBack || onClose || (() => {});
 
@@ -261,7 +298,20 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
         </button>
 
         {isAdmin && (
-          <div className="flex items-center space-x-2 self-start sm:self-auto">
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            {canExportAudit && (
+              <button
+                type="button"
+                onClick={() => setShowAuditFilesModal(true)}
+                className="relative inline-flex items-center px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-xl text-xs font-bold border border-slate-700 transition"
+              >
+                <FolderArchive className="w-4 h-4 mr-1.5 text-amber-400" />
+                Audit Files ({auditFiles.length})
+                {activeJobsCount > 0 && (
+                  <span className="ml-1.5 h-2 w-2 rounded-full bg-amber-400 animate-ping" />
+                )}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onOpenSettleModal?.(siteId)}
@@ -483,9 +533,9 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
       </div>
 
       {/* EXPENSE CATEGORY DISTRIBUTION PIE CHART */}
-      {categoryBreakdowns.length > 0 && (
+      {(categoryBreakdowns.length > 0 || canExportAudit) && (
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="text-base font-bold text-white tracking-tight">
                 Site Expense Category Distribution {statusFilter ? `(${statusFilter} Only)` : '(Approved & Disbursed)'}
@@ -496,17 +546,77 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                   : 'Breakdown of cleared project expenses by material, labour wages, equipment rental, and logistics'}
               </p>
             </div>
-            {statusFilter && (
-              <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                Status: {statusFilter}
-              </span>
-            )}
+            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+              {statusFilter && (
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  Status: {statusFilter}
+                </span>
+              )}
+              {canExportAudit && (
+                <>
+                  <button
+                    type="button"
+                    disabled={isQueueingAuditPack}
+                    onClick={handleTriggerSiteAuditPack}
+                    className="inline-flex items-center px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-slate-950 rounded-xl text-xs font-bold shadow transition-colors"
+                    title="Generate Breakdown PDF + Full Expenses Excel in background and email download links"
+                  >
+                    {isQueueingAuditPack ? (
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <FileText className="w-3.5 h-3.5 mr-1.5" />
+                    )}
+                    Breakdown PDF + Excel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAuditFilesModal(true)}
+                    className="inline-flex items-center px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold border border-slate-700 transition-colors"
+                  >
+                    <FolderArchive className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
+                    Files ({auditFiles.length})
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-          <ExpensePieChart
-            categoryBreakdowns={categoryBreakdowns}
-            onSelectCategory={(cat) => setCategoryFilter(cat || '')}
-            selectedCategory={categoryFilter || null}
-          />
+          {canExportAudit && auditBanner && (
+            <div
+              className={`flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 rounded-xl text-xs border ${
+                auditBanner.type === 'success'
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+              }`}
+            >
+              <span>{auditBanner.text}</span>
+              <div className="flex items-center gap-2">
+                {auditBanner.type === 'success' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAuditFilesModal(true)}
+                    className="font-bold underline hover:text-white"
+                  >
+                    Open Audit Files
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={clearAuditBanner}
+                  className="text-slate-400 hover:text-white"
+                  aria-label="Dismiss notification"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+          {categoryBreakdowns.length > 0 && (
+            <ExpensePieChart
+              categoryBreakdowns={categoryBreakdowns}
+              onSelectCategory={(cat) => setCategoryFilter(cat || '')}
+              selectedCategory={categoryFilter || null}
+            />
+          )}
         </div>
       )}
 
@@ -1110,6 +1220,21 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+      {/* AUDIT FILES DRAWER MODAL (Admin Only) */}
+      {canExportAudit && showAuditFilesModal && (
+        <AuditFilesModal
+          auditFiles={auditFiles}
+          isLoading={auditFilesLoading}
+          onRefresh={() => refetchAuditFiles()}
+          onDownload={downloadAuditFile}
+          onDelete={(id) => deleteAuditFile(id)}
+          downloadingKey={downloadingKey}
+          recipientEmailOverride={recipientEmailOverride}
+          onChangeRecipientEmailOverride={setRecipientEmailOverride}
+          defaultAdminEmail={user?.email}
+          onClose={() => setShowAuditFilesModal(false)}
+        />
       )}
     </>
   );

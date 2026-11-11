@@ -489,3 +489,46 @@ export interface FinanceMetrics {
   currency: string;
   year: number;
 }
+
+export interface AdminAuditPackRequest {
+  year: number;
+  startDate?: string;
+  endDate?: string;
+  status?: string;
+  category?: string;
+  siteId?: string;
+  search?: string;
+  recipientEmail?: string;
+  reportTitle?: string;
+}
+
+export interface AuditReportJobItem {
+  id: string;
+  reportTitle: string;
+  periodLabel: string;
+  filterSummary: string;
+  year: number;
+  startDate?: string;
+  endDate?: string;
+  statusFilter?: string;
+  categoryFilter?: string;
+  siteId?: string;
+  siteName?: string;
+  searchFilter?: string;
+  status: string | number;
+  statusName: 'Queued' | 'Processing' | 'Completed' | 'Failed' | string;
+  totalRecords: number;
+  totalRequestedAmount: number;
+  totalApprovedAmount: number;
+  pdfFileName: string;
+  excelFileName: string;
+  hasPdf: boolean;
+  hasExcel: boolean;
+  requestedByName: string;
+  requestedByEmail: string;
+  emailDispatched: boolean;
+  emailDeliveryNote?: string;
+  queuedAtUtc: string;
+  completedAtUtc?: string;
+  errorMessage?: string;
+}
