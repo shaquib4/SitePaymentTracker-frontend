@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { LanguageToggle } from '../core/auth/LanguageContext';
 import { useAuth } from '../core/auth/AuthContext';
 import { Building2, Lock, Mail, ArrowRight, ShieldCheck, Calculator, HardHat, AlertCircle, Briefcase } from 'lucide-react';
 
@@ -30,6 +31,7 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="absolute right-4 top-4"><LanguageToggle compact /></div>
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         <div className="inline-flex items-center justify-center p-3 bg-amber-500 rounded-2xl shadow-xl shadow-amber-500/20 text-slate-950 mb-4 font-bold">
           <Building2 className="w-8 h-8" />

@@ -1,4 +1,5 @@
 import React from 'react';
+import { LanguageToggle } from '../core/auth/LanguageContext';
 import { useAuth } from '../core/auth/AuthContext';
 import { Building2, LogOut, ShieldCheck, Calculator, HardHat, Store, User as UserIcon, Smartphone, Briefcase } from 'lucide-react';
 import { usePwaInstall, InstallPwaModal } from './InstallPwaModal';
@@ -71,6 +72,7 @@ export const Navbar: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-2 sm:space-x-4">
+          <LanguageToggle compact />
           {!isStandalone && (
             <button
               onClick={triggerInstall}

@@ -1,4 +1,5 @@
 import React, { Suspense, lazy } from 'react';
+import { LanguageProvider } from './core/auth/LanguageContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './core/auth/AuthContext';
 import { LoginPage } from './components/LoginPage';
@@ -129,13 +130,15 @@ const DashboardRouter: React.FC = () => {
 
 export const App: React.FC = () => {
   return (
-    <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <DashboardRouter />
-        </AuthProvider>
-      </QueryClientProvider>
-    </ErrorBoundary>
+    <LanguageProvider>
+      <ErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <DashboardRouter />
+          </AuthProvider>
+        </QueryClientProvider>
+      </ErrorBoundary>
+    </LanguageProvider>
   );
 };
 
