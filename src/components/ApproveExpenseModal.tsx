@@ -70,7 +70,7 @@ export const ApproveExpenseModal: React.FC<ApproveExpenseModalProps> = ({
     if (!isAmountValid || isSelfApproval || isPending) return;
 
     onConfirm(payment.id, {
-      version: payment.version || 1,
+      version: payment.version ?? 1,
       comments: comments.trim() || defaultComment,
       approvedAmount: parsedApproved,
       updatedDescription: updatedDescription.trim(),

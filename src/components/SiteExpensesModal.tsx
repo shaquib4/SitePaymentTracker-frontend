@@ -1026,7 +1026,7 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                 onClick={() => {
                   requestInfoMutation.mutate({
                     paymentId: showRequestInfoModalPayment.id,
-                    version: showRequestInfoModalPayment.version || 1,
+                    version: showRequestInfoModalPayment.version ?? 1,
                     questions: requestInfoQuestions.trim(),
                   });
                 }}
@@ -1099,7 +1099,7 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                 onClick={() => {
                   markPaidMutation.mutate({
                     paymentId: showCompleteModalPayment.id,
-                    version: showCompleteModalPayment.version || 1,
+                    version: showCompleteModalPayment.version ?? 1,
                     comments: completeComments || 'Payment disbursed & completed by Admin',
                   });
                 }}
