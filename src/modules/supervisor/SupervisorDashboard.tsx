@@ -896,10 +896,7 @@ export const SupervisorDashboard: React.FC = () => {
             ) : (
               activePayments.map((p) => (
                 <div key={p.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="bg-amber-500/20 text-amber-300 font-semibold px-2.5 py-0.5 rounded-lg text-xs">
-                      {p.category}
-                    </span>
+                  <div className="flex items-start justify-end gap-2">
                     <span
                       className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
                         p.status === 'Approved'
@@ -953,7 +950,6 @@ export const SupervisorDashboard: React.FC = () => {
               <thead className="bg-slate-950/60 text-slate-400 uppercase text-[11px] font-semibold tracking-wider">
                 <tr>
                   <th className="py-3 px-4">Claim</th>
-                  <th className="py-3 px-4">Category</th>
                   <th className="py-3 px-4">Amount (₹)</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Notes</th>
@@ -964,7 +960,7 @@ export const SupervisorDashboard: React.FC = () => {
                   <TableShimmer rows={5} hasActions={false} />
                 ) : activePayments.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-400 text-xs">
+                    <td colSpan={4} className="py-8 text-center text-slate-400 text-xs">
                       No material expense claims recorded yet. Click "Claim Material Expense" above.
                     </td>
                   </tr>
@@ -974,9 +970,6 @@ export const SupervisorDashboard: React.FC = () => {
                     <td className="py-3 px-4">
                       <div className="font-semibold text-white">{p.title}</div>
                       <div className="text-xs text-slate-400">{p.description}</div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-xs">{p.category}</span>
                     </td>
                     <td className="py-3 px-4">
                       <AmountBreakdown
