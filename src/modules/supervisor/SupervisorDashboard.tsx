@@ -82,7 +82,6 @@ export const SupervisorDashboard: React.FC = () => {
   const [matTitle, setMatTitle] = useState('');
   const [matDesc, setMatDesc] = useState('');
   const [matAmount, setMatAmount] = useState('');
-  const [matCategory, setMatCategory] = useState('');
   const [matSiteId, setMatSiteId] = useState('');
   const [matStartDate, setMatStartDate] = useState('');
   const [matEndDate, setMatEndDate] = useState('');
@@ -156,6 +155,7 @@ export const SupervisorDashboard: React.FC = () => {
   });
 
   const labourers = allLabourersData?.items || [];
+  const selectedWageLabourer = labourers.find((labourer) => labourer.id === wageLabourerId);
   const paginatedLabourers = labourersPagedData?.items || [];
   const totalFilteredLabourers = labourersPagedData?.totalCount ?? 0;
   const totalManagedLabourers = allLabourersData?.totalCount ?? labourers.length;
@@ -219,6 +219,8 @@ export const SupervisorDashboard: React.FC = () => {
       setWageAmount('');
       setWageTitle('');
       setWageDesc('');
+      setWageLabourerId('');
+      setWageSiteId('');
       setWageRequestError('');
     },
     onError: (err: any) => {
@@ -237,7 +239,6 @@ export const SupervisorDashboard: React.FC = () => {
       setMatTitle('');
       setMatDesc('');
       setMatAmount('');
-      setMatCategory('');
     },
   });
 
@@ -1117,8 +1118,8 @@ export const SupervisorDashboard: React.FC = () => {
 
       {/* MODAL: WAGE REQUEST (FORCES LABOURER ID & SITE ID) */}
       {showWageRequestModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 my-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold text-white">Submit Labour Wage Request</h3>
@@ -1139,6 +1140,10 @@ export const SupervisorDashboard: React.FC = () => {
               onSubmit={(e) => {
                 e.preventDefault();
                 setWageRequestError('');
+                if (!wageLabourerId || !wageSiteId) {
+                  setWageRequestError('Choose a labourer who has an assigned project site before requesting wages.');
+                  return;
+                }
                 if (!wageStartDate || !wageEndDate || wageEndDate < wageStartDate) {
                   setWageRequestError('Choose a valid wage period with the end date on or after the start date.');
                   return;
@@ -1166,8 +1171,14 @@ export const SupervisorDashboard: React.FC = () => {
                   required
                   value={wageLabourerId}
                   onChange={(e) => {
-                    setWageLabourerId(e.target.value);
-                    const selected = labourers.find((l) => l.id === e.target.value);
+                    const selectedId = e.target.value;
+                    const selected = labourers.find((l) => l.id === selectedId);
+                    setWageLabourerId(selectedId);
+                    setWageSiteId(selected?.siteId || '');
+                    setWageRequestError('');
+                    if (selected && !selected.siteId) {
+                      setWageRequestError('Assign this labourer to a project site before requesting wages.');
+                    }
                     if (selected && !wageTitle) {
                       setWageTitle(`Weekly Wages - ${selected.name}`);
                     }
@@ -1184,20 +1195,12 @@ export const SupervisorDashboard: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Project Site</label>
-                <select
-                  required
-                  value={wageSiteId}
-                  onChange={(e) => setWageSiteId(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">-- Choose Project Site --</option>
-                  {sites.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Assigned Project Site</label>
+                <div className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white">
+                  {selectedWageLabourer
+                    ? (selectedWageLabourer.siteId ? selectedWageLabourer.siteName : 'No site assigned - assign a site before requesting wages')
+                    : 'Choose a labourer first'}
+                </div>
               </div>
 
               <div>
@@ -1213,7 +1216,7 @@ export const SupervisorDashboard: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Wage Period Start Date</label>
                   <input
@@ -1314,7 +1317,7 @@ export const SupervisorDashboard: React.FC = () => {
                   title: matTitle,
                   description: matDesc,
                   amount: parseFloat(matAmount),
-                  category: matCategory || 'General Materials',
+                  category: 'General Materials',
                   currency: 'INR',
                   siteId: matSiteId || undefined,
                   expenseYear: currentCalendarYear,
@@ -1332,18 +1335,6 @@ export const SupervisorDashboard: React.FC = () => {
                   value={matTitle}
                   onChange={(e) => setMatTitle(e.target.value)}
                   placeholder="e.g. 50 Bags Ultratech Cement"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Category</label>
-                <input
-                  type="text"
-                  required
-                  value={matCategory}
-                  onChange={(e) => setMatCategory(e.target.value)}
-                  placeholder="Cement, Sariya, Diesel, Transport..."
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
               </div>
