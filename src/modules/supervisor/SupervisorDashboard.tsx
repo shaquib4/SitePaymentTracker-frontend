@@ -33,6 +33,18 @@ import { ExpensePieChart } from '../../components/ExpensePieChart';
 import { Pagination } from '../../components/Pagination';
 import { TableShimmer, CardShimmer } from '../../components/ShimmerLoader';
 
+const formatLocalDateInput = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getCurrentMonthStart = (): string => {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+};
+
 export const SupervisorDashboard: React.FC = () => {
   const queryClient = useQueryClient();
   const currentCalendarYear = new Date().getFullYear();
@@ -61,8 +73,10 @@ export const SupervisorDashboard: React.FC = () => {
   const [wageAmount, setWageAmount] = useState('');
   const [wageTitle, setWageTitle] = useState('');
   const [wageDesc, setWageDesc] = useState('');
-  const [wageStartDate, setWageStartDate] = useState('');
-  const [wageEndDate, setWageEndDate] = useState('');
+  const [wageStartDate, setWageStartDate] = useState(getCurrentMonthStart);
+  const [wageEndDate, setWageEndDate] = useState(() => formatLocalDateInput(new Date()));
+  const [wageRequestError, setWageRequestError] = useState('');
+  const wageExpenseYear = Number(wageStartDate.slice(0, 4)) || currentCalendarYear;
 
   const [showMaterialModal, setShowMaterialModal] = useState(false);
   const [matTitle, setMatTitle] = useState('');
@@ -205,6 +219,10 @@ export const SupervisorDashboard: React.FC = () => {
       setWageAmount('');
       setWageTitle('');
       setWageDesc('');
+      setWageRequestError('');
+    },
+    onError: (err: any) => {
+      setWageRequestError(err?.response?.data?.detail || err?.message || 'Failed to submit wage request.');
     },
   });
 
@@ -1111,16 +1129,31 @@ export const SupervisorDashboard: React.FC = () => {
               </button>
             </div>
 
+            {wageRequestError && (
+              <div role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+                {wageRequestError}
+              </div>
+            )}
+
             <form
               onSubmit={(e) => {
                 e.preventDefault();
+                setWageRequestError('');
+                if (!wageStartDate || !wageEndDate || wageEndDate < wageStartDate) {
+                  setWageRequestError('Choose a valid wage period with the end date on or after the start date.');
+                  return;
+                }
+                if (Number(wageEndDate.slice(0, 4)) !== wageExpenseYear) {
+                  setWageRequestError('The full wage period must fall within the same selected calendar year.');
+                  return;
+                }
                 submitWageRequestMutation.mutate({
                   labourerId: wageLabourerId,
                   siteId: wageSiteId,
                   amount: parseFloat(wageAmount),
-                  expenseYear: currentCalendarYear,
                   startDate: wageStartDate,
                   endDate: wageEndDate,
+                  expenseYear: wageExpenseYear,
                   title: wageTitle,
                   description: wageDesc,
                 });
@@ -1182,26 +1215,40 @@ export const SupervisorDashboard: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Start Date</label>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Wage Period Start Date</label>
                   <input
                     type="date"
                     required
                     value={wageStartDate}
-                    onChange={(e) => setWageStartDate(e.target.value)}
+                    onChange={(e) => {
+                      const nextStartDate = e.target.value;
+                      setWageStartDate(nextStartDate);
+                      setWageRequestError('');
+                      if (nextStartDate && wageEndDate &&
+                        (wageEndDate < nextStartDate || wageEndDate.slice(0, 4) !== nextStartDate.slice(0, 4))) {
+                        setWageEndDate(nextStartDate);
+                      }
+                    }}
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">End Date</label>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Wage Period End Date</label>
                   <input
                     type="date"
                     required
+                    min={wageStartDate || undefined}
+                    max={`${wageExpenseYear}-12-31`}
                     value={wageEndDate}
-                    onChange={(e) => setWageEndDate(e.target.value)}
+                    onChange={(e) => {
+                      setWageEndDate(e.target.value);
+                      setWageRequestError('');
+                    }}
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
+              <p className="-mt-2 text-[11px] text-slate-400">Recorded for calendar year {wageExpenseYear}; both dates are included in the wage period.</p>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Title</label>
