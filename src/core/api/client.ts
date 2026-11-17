@@ -1,6 +1,6 @@
 import axios, { AxiosError } from 'axios';
 
-const apiBaseUrl = import.meta.env.VITE_API_URL || '/api';
+const apiBaseUrl = 'https://sitepaymenttracker-backend.onrender.com/api';
 
 export const apiClient = axios.create({
   baseURL: apiBaseUrl,

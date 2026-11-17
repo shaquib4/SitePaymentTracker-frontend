@@ -69,18 +69,17 @@
 
 ---
 
-## 3. User Roles, Permissions & Demo Credentials
+## 3. User Roles and Permissions
 
-All test accounts use the default password: **`Password123!`**
+Demo credentials are intentionally not documented or displayed in the application. Provision accounts through the Admin user-management flow, and keep passwords and identifiers in an approved secret manager.
 
-| Role | Demo User Name | Login Identifier | 6-Digit ID | Core Permissions & Scopes |
-| :--- | :--- | :--- | :--- | :--- |
-| **Admin** | Shaquib Khan | `khanshaquib21@gmail.com` | `749201` | Full administrative control: approve/reject claims directly in master ledger or site view, settle project sites, upload MBs, generate new 6-digit employee accounts, review Accountant period requests. |
-| **Accountant** | Ramesh Sharma | `521402` *(no email)* | `521402` | Read-only financial gatekeeper: verify vouchers, request clarifications, initiate own wage claims, export Excel ledgers, request access for historical years. |
-| **Supervisor** | Surendra Kumar | `616244` *(no email)* | `616244` | Site operations: onboard & manage labourers, submit weekly wage claims against daily rates, submit site material expenses, view site muster roll. |
-| **Office Worker** | Neha Sharma | `400004` / `officeworker@khanenterprises.com` | `400004` | **Self-service expense claims**: submit personal claims (travel, stationery, IT), track real-time approval status, audit personal historical payments with calendar period filters. Strictly isolated to own claims. |
-| **Vendor** | Apex Supplies | `918234` *(no email)* | `918234` | Vendor portal placeholder (Phase 2 expansion). |
-
+| Role | Access scope |
+| :--- | :--- |
+| **Admin** | Tenant-wide administration, approvals, and reporting. |
+| **Accountant** | Read-only financial records within approved periods; may request clarifications and period access. |
+| **Supervisor** | Own payment requests and labourers assigned to that supervisor. |
+| **Office Worker** | Own expense claims and payment history. |
+| **Vendor** | No financial API access until a vendor portal is implemented. |
 ---
 
 ## 4. Key Functional Modules & Architectural Enhancements

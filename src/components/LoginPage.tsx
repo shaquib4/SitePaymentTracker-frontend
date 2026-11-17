@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { LanguageToggle } from '../core/auth/LanguageContext';
 import { useAuth } from '../core/auth/AuthContext';
-import { Building2, Lock, Mail, ArrowRight, ShieldCheck, Calculator, HardHat, AlertCircle, Briefcase } from 'lucide-react';
+import { Building2, Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
-  const [email, setEmail] = useState('khanshaquib21@gmail.com');
-  const [password, setPassword] = useState('Password123!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -23,11 +23,6 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleQuickSelect = (demoEmail: string) => {
-    setEmail(demoEmail);
-    setPassword('Password123!');
-    setError(null);
-  };
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
@@ -100,105 +95,6 @@ export const LoginPage: React.FC = () => {
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-slate-700/60">
-            <p className="text-xs text-slate-400 mb-3 font-medium">Quick Demo Credentials (Khan Enterprises):</p>
-            <div className="grid grid-cols-1 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickSelect('khanshaquib21@gmail.com')}
-                className={`p-2.5 rounded-lg border text-left text-xs transition-colors flex items-center justify-between ${
-                  email === 'khanshaquib21@gmail.com'
-                    ? 'border-amber-500 bg-amber-950/40 text-amber-300'
-                    : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-700/50'
-                }`}
-              >
-                <div className="flex items-center space-x-2">
-                  <ShieldCheck className="w-4 h-4 text-amber-400" />
-                  <div>
-                    <span className="font-semibold block">Shaquib Khan (Admin)</span>
-                    <span className="text-[11px] text-slate-400">khanshaquib21@gmail.com (ID: 749201)</span>
-                  </div>
-                </div>
-                <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400">Select</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickSelect('521402')}
-                className={`p-2.5 rounded-lg border text-left text-xs transition-colors flex items-center justify-between ${
-                  email === '521402'
-                    ? 'border-amber-500 bg-amber-950/40 text-amber-300'
-                    : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-700/50'
-                }`}
-              >
-                <div className="flex items-center space-x-2">
-                  <Calculator className="w-4 h-4 text-emerald-400" />
-                  <div>
-                    <span className="font-semibold block">Ramesh Sharma (Accountant)</span>
-                    <span className="text-[11px] text-slate-400">User ID: 521402 (No Email Login)</span>
-                  </div>
-                </div>
-                <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400">Select</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickSelect('616244')}
-                className={`p-2.5 rounded-lg border text-left text-xs transition-colors flex items-center justify-between ${
-                  email === '616244'
-                    ? 'border-amber-500 bg-amber-950/40 text-amber-300'
-                    : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-700/50'
-                }`}
-              >
-                <div className="flex items-center space-x-2">
-                  <HardHat className="w-4 h-4 text-blue-400" />
-                  <div>
-                    <span className="font-semibold block">Surendra Kumar (Supervisor)</span>
-                    <span className="text-[11px] text-slate-400">User ID: 616244 • Metro Project</span>
-                  </div>
-                </div>
-                <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400">Select</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickSelect('400004')}
-                className={`p-2.5 rounded-lg border text-left text-xs transition-colors flex items-center justify-between ${
-                  email === '400004' || email === 'officeworker@khanenterprises.com'
-                    ? 'border-cyan-500 bg-cyan-950/40 text-cyan-300'
-                    : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-700/50'
-                }`}
-              >
-                <div className="flex items-center space-x-2">
-                  <Briefcase className="w-4 h-4 text-cyan-400" />
-                  <div>
-                    <span className="font-semibold block">Neha Sharma (Office Worker)</span>
-                    <span className="text-[11px] text-slate-400">User ID: 400004 • Personal Claims & Period Audit</span>
-                  </div>
-                </div>
-                <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400">Select</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickSelect('918234')}
-                className={`p-2.5 rounded-lg border text-left text-xs transition-colors flex items-center justify-between ${
-                  email === '918234'
-                    ? 'border-amber-500 bg-amber-950/40 text-amber-300'
-                    : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-700/50'
-                }`}
-              >
-                <div className="flex items-center space-x-2">
-                  <ShieldCheck className="w-4 h-4 text-purple-400" />
-                  <div>
-                    <span className="font-semibold block">Apex Supplies (Vendor)</span>
-                    <span className="text-[11px] text-slate-400">User ID: 918234 • Material Supplier</span>
-                  </div>
-                </div>
-                <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400">Select</span>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
