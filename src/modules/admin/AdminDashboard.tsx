@@ -10,6 +10,7 @@ import {
   PeriodAccessRequestDto,
   GenerateUserRequest,
   GenerateUserResponse,
+  ResetPasswordResponse,
   ApprovePaymentDto,
   PagedPaymentsResponse,
   PagedLabourersResponse,
@@ -56,6 +57,7 @@ import {
   Coins,
   Lock,
   UserCheck,
+  KeyRound,
   CreditCard,
   Edit3,
   Users,
@@ -83,6 +85,8 @@ export const AdminDashboard: React.FC = () => {
   const [showGenerateUserModal, setShowGenerateUserModal] = useState(false);
   const [generatedUserCreds, setGeneratedUserCreds] = useState<GenerateUserResponse | null>(null);
   const [copiedCreds, setCopiedCreds] = useState(false);
+  const [resetPasswordCreds, setResetPasswordCreds] = useState<ResetPasswordResponse | null>(null);
+  const [copiedResetPassword, setCopiedResetPassword] = useState(false);
 
   const [showApproveModalPayment, setShowApproveModalPayment] = useState<PaymentRequest | null>(null);
 
@@ -325,6 +329,17 @@ export const AdminDashboard: React.FC = () => {
     },
   });
 
+  const resetPasswordMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await apiClient.post<ResetPasswordResponse>(`/users/${userId}/reset-password`);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      setResetPasswordCreds(data);
+      setCopiedResetPassword(false);
+    },
+  });
+
   const deactivateUserMutation = useMutation({
     mutationFn: async (userId: string) => {
       await apiClient.put(`/users/${userId}/deactivate`);
@@ -532,10 +547,18 @@ export const AdminDashboard: React.FC = () => {
   const handleCopyCredentials = () => {
     if (!generatedUserCreds) return;
     const emailLine = generatedUserCreds.email ? `\nEmail: ${generatedUserCreds.email}` : '';
-    const text = `Khan Enterprises Employee Credentials:\nUser ID: ${generatedUserCreds.sixDigitUserId}${emailLine}\nTemporary Password: ${generatedUserCreds.temporaryPassword}\nLogin: http://localhost:5173`;
+    const text = `Khan Enterprises Employee Credentials:\nUser ID: ${generatedUserCreds.sixDigitUserId}${emailLine}\nTemporary Password: ${generatedUserCreds.temporaryPassword}\nLogin: ${window.location.origin}`;
     navigator.clipboard.writeText(text);
     setCopiedCreds(true);
     setTimeout(() => setCopiedCreds(false), 3000);
+  };
+
+  const handleCopyResetPassword = async () => {
+    if (!resetPasswordCreds) return;
+    const text = `Khan Enterprises Password Reset:\nUser ID: ${resetPasswordCreds.sixDigitUserId}${resetPasswordCreds.email ? `\nEmail: ${resetPasswordCreds.email}` : ''}\nTemporary Password: ${resetPasswordCreds.temporaryPassword}`;
+    await navigator.clipboard.writeText(text);
+    setCopiedResetPassword(true);
+    setTimeout(() => setCopiedResetPassword(false), 3000);
   };
 
   // If currently viewing a dedicated employee detail page, render that component
@@ -2058,7 +2081,7 @@ export const AdminDashboard: React.FC = () => {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center justify-between gap-2 pt-1">
                   <button
                     type="button"
                     onClick={() => setViewingEmployeeId(u.id)}
@@ -2066,6 +2089,20 @@ export const AdminDashboard: React.FC = () => {
                   >
                     <History className="w-3.5 h-3.5 mr-1 text-amber-400" />
                     View Expenses
+                  </button>
+                  <button
+                    type="button"
+                    disabled={resetPasswordMutation.isPending}
+                    onClick={() => {
+                      if (window.confirm(`Reset ${u.fullName}'s password? Their current password will stop working.`)) {
+                        resetPasswordMutation.mutate(u.id);
+                      }
+                    }}
+                    className="py-2.5 px-3 min-h-[44px] rounded-xl text-xs font-semibold border flex items-center justify-center text-amber-300 border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/20 disabled:opacity-50"
+                    title="Reset employee password"
+                  >
+                    <KeyRound className="w-3.5 h-3.5 mr-1" />
+                    Reset Password
                   </button>
                   <button
                     type="button"
@@ -2193,6 +2230,20 @@ export const AdminDashboard: React.FC = () => {
                       >
                         <History className="w-3.5 h-3.5 mr-1" />
                         View Expenses
+                      </button>
+
+                      <button
+                        disabled={resetPasswordMutation.isPending}
+                        onClick={() => {
+                          if (window.confirm(`Reset ${u.fullName}'s password? Their current password will stop working.`)) {
+                            resetPasswordMutation.mutate(u.id);
+                          }
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-amber-300 hover:bg-slate-800 rounded transition-colors disabled:opacity-50"
+                        title="Reset employee password"
+                        aria-label={`Reset password for ${u.fullName}`}
+                      >
+                        <KeyRound className="w-4 h-4" />
                       </button>
 
                       {u.isActive && (
@@ -2495,6 +2546,70 @@ export const AdminDashboard: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setGeneratedUserCreds(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-semibold"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resetPasswordCreds && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 text-amber-300">
+                <KeyRound className="w-5 h-5" />
+                <h3 className="text-lg font-bold text-white">Password reset</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetPasswordCreds(null)}
+                className="text-slate-400 hover:text-white"
+                aria-label="Close password reset details"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              The employee’s old password no longer works. Share this temporary password privately; it is shown only once.
+            </p>
+
+            <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-2 font-mono text-sm text-slate-200">
+              <div>
+                <span className="text-slate-500 text-xs uppercase block">Employee:</span>
+                <span>{resetPasswordCreds.fullName}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 text-xs uppercase block">Six-Digit User ID:</span>
+                <span className="text-amber-300 font-bold">{resetPasswordCreds.sixDigitUserId}</span>
+              </div>
+              {resetPasswordCreds.email && (
+                <div>
+                  <span className="text-slate-500 text-xs uppercase block">Email:</span>
+                  <span>{resetPasswordCreds.email}</span>
+                </div>
+              )}
+              <div>
+                <span className="text-slate-500 text-xs uppercase block">Temporary Password:</span>
+                <span className="text-emerald-400 font-bold break-all">{resetPasswordCreds.temporaryPassword}</span>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={handleCopyResetPassword}
+                className="flex items-center px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-sm shadow transition-colors"
+              >
+                {copiedResetPassword ? <Check className="w-4 h-4 mr-1.5" /> : <Copy className="w-4 h-4 mr-1.5" />}
+                {copiedResetPassword ? 'Copied' : 'Copy credentials'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setResetPasswordCreds(null)}
                 className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-semibold"
               >
                 Done

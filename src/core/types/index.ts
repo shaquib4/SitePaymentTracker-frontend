@@ -315,6 +315,14 @@ export interface GenerateUserResponse {
   tenantId?: string;
 }
 
+export interface ResetPasswordResponse {
+  userId: string;
+  fullName: string;
+  email?: string | null;
+  sixDigitUserId: string;
+  temporaryPassword: string;
+}
+
 export interface UserHistoryItem {
   id: string;
   title: string;
