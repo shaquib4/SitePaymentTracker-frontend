@@ -1190,9 +1190,9 @@ export const AdminDashboard: React.FC = () => {
                       )}
 
                       {(p.status === 'Pending' || p.status === 'InfoRequested') && (
-                        <>
+                        <div className="grid grid-cols-2 gap-2">
                         {isSelf ? (
-                          <div className="w-full py-2.5 px-3 min-h-[44px] bg-amber-500/10 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold flex items-center justify-center text-center">
+                          <div className="col-span-2 w-full py-2.5 px-3 min-h-[44px] bg-amber-500/10 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold flex items-center justify-center text-center">
                             <ShieldCheck className="w-4 h-4 mr-1.5 text-amber-400" />
                             Peer Approval Req (Self)
                           </div>
@@ -1202,10 +1202,10 @@ export const AdminDashboard: React.FC = () => {
                               approveMutation.reset();
                               setShowApproveModalPayment(p);
                             }}
-                            className="w-full py-2.5 px-3 min-h-[44px] bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs shadow-md flex items-center justify-center transition-colors"
+                            className="w-full py-2.5 px-2 min-h-[44px] bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs shadow-md flex items-center justify-center transition-colors"
                           >
-                            <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                            Approve & Categorize
+                            <CheckCircle2 className="w-4 h-4 mr-1.5 shrink-0" />
+                            Approve
                           </button>
                         )}
                         <button
@@ -1216,40 +1216,44 @@ export const AdminDashboard: React.FC = () => {
                           }}
                           type="button"
                           aria-label={`Reject payment request from ${p.submitterName || 'employee'}`}
-                          className="w-full py-2.5 px-3 min-h-[44px] bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs border border-rose-400/50 flex items-center justify-center transition-colors shadow-md"
+                          className={`w-full py-2.5 px-2 min-h-[44px] bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs border border-rose-400/50 flex items-center justify-center transition-colors shadow-md ${
+                            isSelf ? 'col-span-2' : ''
+                          }`}
                         >
-                          <X className="w-4 h-4 mr-1.5" />
+                          <X className="w-4 h-4 mr-1.5 shrink-0" />
                           Reject
                         </button>
-                        </>
+                        </div>
                       )}
 
                       {p.status === 'Approved' && (
-                        <div className="flex flex-col gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowCompleteModalPayment(p);
-                              setCompleteComments('');
-                            }}
-                            className="w-full py-2.5 px-3 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow-md flex items-center justify-center transition-colors"
-                          >
-                            <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                            Mark Complete / Disbursed
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              rejectMutation.reset();
-                              setRejectReason('');
-                              setShowRejectModalPayment(p);
-                            }}
-                            aria-label={`Reject approved payment request from ${p.submitterName || 'employee'}`}
-                            className="w-full py-2 px-3 min-h-[38px] bg-rose-900/40 hover:bg-rose-800/60 text-rose-300 font-semibold rounded-xl text-xs border border-rose-700/50 flex items-center justify-center transition-colors"
-                          >
-                            <X className="w-3.5 h-3.5 mr-1.5" />
-                            Reject Approved Claim
-                          </button>
+                        <div className="space-y-1.5">
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowCompleteModalPayment(p);
+                                setCompleteComments('');
+                              }}
+                              className="w-full py-2.5 px-2 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow-md flex items-center justify-center transition-colors"
+                            >
+                              <CheckCircle2 className="w-4 h-4 mr-1.5 shrink-0" />
+                              Disburse
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                rejectMutation.reset();
+                                setRejectReason('');
+                                setShowRejectModalPayment(p);
+                              }}
+                              aria-label={`Reject approved payment request from ${p.submitterName || 'employee'}`}
+                              className="w-full py-2.5 px-2 min-h-[44px] bg-rose-900/40 hover:bg-rose-800/60 text-rose-300 font-semibold rounded-xl text-xs border border-rose-700/50 flex items-center justify-center transition-colors"
+                            >
+                              <X className="w-3.5 h-3.5 mr-1.5 shrink-0" />
+                              Reject
+                            </button>
+                          </div>
                           <div className="w-full text-center text-[11px] text-emerald-400 font-medium">
                             Approved (v{p.version}) • Awaiting Disbursement
                           </div>
