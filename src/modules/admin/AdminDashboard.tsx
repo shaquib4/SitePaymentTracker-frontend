@@ -12,6 +12,7 @@ import {
   GenerateUserResponse,
   ResetPasswordResponse,
   ApprovePaymentDto,
+  RejectPaymentDto,
   PagedPaymentsResponse,
   PagedLabourersResponse,
   PagedUsersResponse
@@ -89,6 +90,8 @@ export const AdminDashboard: React.FC = () => {
   const [copiedResetPassword, setCopiedResetPassword] = useState(false);
 
   const [showApproveModalPayment, setShowApproveModalPayment] = useState<PaymentRequest | null>(null);
+  const [showRejectModalPayment, setShowRejectModalPayment] = useState<PaymentRequest | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   const [showRequestInfoModalPayment, setShowRequestInfoModalPayment] = useState<PaymentRequest | null>(null);
   const [requestInfoQuestions, setRequestInfoQuestions] = useState('');
@@ -370,6 +373,20 @@ export const AdminDashboard: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       queryClient.invalidateQueries({ queryKey: ['sites-profitability'] });
       setShowApproveModalPayment(null);
+    },
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: async ({ paymentId, dto }: { paymentId: string; dto: RejectPaymentDto }) => {
+      const res = await apiClient.post<PaymentRequest>(`/payments/${paymentId}/reject`, dto);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['sites-profitability'] });
+      setShowRejectModalPayment(null);
+      setRejectReason('');
     },
   });
 
@@ -1173,7 +1190,8 @@ export const AdminDashboard: React.FC = () => {
                       )}
 
                       {(p.status === 'Pending' || p.status === 'InfoRequested') && (
-                        isSelf ? (
+                        <>
+                        {isSelf ? (
                           <div className="w-full py-2.5 px-3 min-h-[44px] bg-amber-500/10 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold flex items-center justify-center text-center">
                             <ShieldCheck className="w-4 h-4 mr-1.5 text-amber-400" />
                             Peer Approval Req (Self)
@@ -1189,7 +1207,18 @@ export const AdminDashboard: React.FC = () => {
                             <CheckCircle2 className="w-4 h-4 mr-1.5" />
                             Approve & Categorize
                           </button>
-                        )
+                        )}
+                        <button
+                          onClick={() => {
+                            rejectMutation.reset();
+                            setRejectReason('');
+                            setShowRejectModalPayment(p);
+                          }}
+                          className="w-full py-2.5 px-3 min-h-[44px] bg-rose-950/50 hover:bg-rose-900/70 text-rose-300 font-semibold rounded-xl text-xs border border-rose-800/70 flex items-center justify-center transition-colors"
+                        >
+                          Reject Request
+                        </button>
+                        </>
                       )}
 
                       {p.status === 'Approved' && (
@@ -1392,7 +1421,8 @@ export const AdminDashboard: React.FC = () => {
                             </button>
                           )}
                           {(p.status === 'Pending' || p.status === 'InfoRequested') && (
-                            p.userId === user?.userId ? (
+                            <>
+                            {p.userId === user?.userId ? (
                               <span
                                 className="inline-flex items-center px-2.5 py-1 bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold"
                                 title="Peer review required: In our 4-admin system, you cannot self-approve your own payment request. Another Admin must approve it."
@@ -1410,7 +1440,19 @@ export const AdminDashboard: React.FC = () => {
                               >
                                 Approve & Categorize
                               </button>
-                            )
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                rejectMutation.reset();
+                                setRejectReason('');
+                                setShowRejectModalPayment(p);
+                              }}
+                              className="px-3 py-1 bg-rose-950/60 hover:bg-rose-900 text-rose-300 font-bold rounded-lg text-xs border border-rose-800/70 transition-colors"
+                            >
+                              Reject
+                            </button>
+                            </>
                           )}
                           {p.status === 'Approved' && (
                             <div className="inline-flex items-center space-x-2">
@@ -2639,6 +2681,48 @@ export const AdminDashboard: React.FC = () => {
           }}
           onConfirm={(paymentId, dto) => approveMutation.mutate({ paymentId, dto })}
         />
+      )}
+
+      {showRejectModalPayment && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-labelledby="reject-request-title">
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 id="reject-request-title" className="text-lg font-bold text-white">Reject payment request</h2>
+                <p className="mt-1 text-sm text-slate-400">Add a reason so the employee knows why it was rejected.</p>
+              </div>
+              <button type="button" onClick={() => { rejectMutation.reset(); setShowRejectModalPayment(null); }} className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white" aria-label="Close">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <label htmlFor="reject-reason" className="mb-2 block text-sm font-medium text-slate-200">Reason</label>
+            <textarea
+              id="reject-reason"
+              value={rejectReason}
+              onChange={(event) => setRejectReason(event.target.value)}
+              rows={4}
+              maxLength={1000}
+              placeholder="Explain why this request is being rejected"
+              className="w-full resize-y rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm text-white placeholder:text-slate-500 focus:border-rose-500 focus:outline-none"
+            />
+            {rejectMutation.error && (
+              <p className="mt-2 text-sm text-rose-300">
+                {(rejectMutation.error as any)?.response?.data?.detail || (rejectMutation.error as Error).message || 'Could not reject this request.'}
+              </p>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => { rejectMutation.reset(); setShowRejectModalPayment(null); }} className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800">Cancel</button>
+              <button
+                type="button"
+                disabled={!rejectReason.trim() || rejectMutation.isPending}
+                onClick={() => rejectMutation.mutate({ paymentId: showRejectModalPayment.id, dto: { reason: rejectReason.trim(), version: showRejectModalPayment.version } })}
+                className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {rejectMutation.isPending ? 'Rejecting…' : 'Confirm rejection'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* MODAL: ADMIN REQUEST MORE DETAILS */}
