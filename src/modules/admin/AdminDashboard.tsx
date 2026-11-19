@@ -1214,9 +1214,12 @@ export const AdminDashboard: React.FC = () => {
                             setRejectReason('');
                             setShowRejectModalPayment(p);
                           }}
-                          className="w-full py-2.5 px-3 min-h-[44px] bg-rose-950/50 hover:bg-rose-900/70 text-rose-300 font-semibold rounded-xl text-xs border border-rose-800/70 flex items-center justify-center transition-colors"
+                          type="button"
+                          aria-label={`Reject payment request from ${p.submitterName || 'employee'}`}
+                          className="w-full py-2.5 px-3 min-h-[44px] bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs border border-rose-400/50 flex items-center justify-center transition-colors shadow-md"
                         >
-                          Reject Request
+                          <X className="w-4 h-4 mr-1.5" />
+                          Reject
                         </button>
                         </>
                       )}
@@ -1448,8 +1451,10 @@ export const AdminDashboard: React.FC = () => {
                                 setRejectReason('');
                                 setShowRejectModalPayment(p);
                               }}
-                              className="px-3 py-1 bg-rose-950/60 hover:bg-rose-900 text-rose-300 font-bold rounded-lg text-xs border border-rose-800/70 transition-colors"
+                              aria-label={`Reject payment request from ${p.submitterName || 'employee'}`}
+                              className="inline-flex items-center px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg text-xs border border-rose-400/50 shadow transition-colors"
                             >
+                              <X className="w-3.5 h-3.5 mr-1" />
                               Reject
                             </button>
                             </>
