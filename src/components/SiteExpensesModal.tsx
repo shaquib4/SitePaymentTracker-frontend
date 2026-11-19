@@ -90,6 +90,8 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
 
   // Modals for Admin Approval & Clarification Requests
   const [showApproveModalPayment, setShowApproveModalPayment] = useState<SiteExpenseItemDto | null>(null);
+  const [showRejectModalPayment, setShowRejectModalPayment] = useState<SiteExpenseItemDto | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   const [showRequestInfoModalPayment, setShowRequestInfoModalPayment] = useState<SiteExpenseItemDto | null>(null);
   const [requestInfoQuestions, setRequestInfoQuestions] = useState('');
@@ -185,6 +187,25 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       setShowApproveModalPayment(null);
+    },
+  });
+
+  // Reject Mutation (Admin Only)
+  const rejectMutation = useMutation({
+    mutationFn: async ({ paymentId, reason, version }: { paymentId: string; reason: string; version: number }) => {
+      const res = await apiClient.post(`/payments/${paymentId}/reject`, {
+        reason,
+        version,
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['site-expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['sites-profitability'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      setShowRejectModalPayment(null);
+      setRejectReason('');
     },
   });
 
@@ -774,7 +795,8 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                     )}
 
                     {(item.status === 'Pending' || item.status === 'InfoRequested') && (
-                      item.userId === user?.userId ? (
+                      <>
+                      {item.userId === user?.userId ? (
                         <div className="w-full py-2.5 px-3 min-h-[42px] bg-amber-500/10 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold flex items-center justify-center text-center">
                           <ShieldCheck className="w-4 h-4 mr-1.5 text-amber-400" />
                           Peer Approval Req (Self)
@@ -791,7 +813,21 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                           <CheckCircle2 className="w-4 h-4 mr-1.5" />
                           Approve & Categorize
                         </button>
-                      )
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          rejectMutation.reset();
+                          setRejectReason('');
+                          setShowRejectModalPayment(item);
+                        }}
+                        aria-label={`Reject payment request: ${item.title}`}
+                        className="w-full py-2.5 px-3 min-h-[42px] bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs border border-rose-400/50 flex items-center justify-center transition-colors shadow-md"
+                      >
+                        <X className="w-4 h-4 mr-1.5" />
+                        Reject
+                      </button>
+                      </>
                     )}
 
                     {item.status === 'Approved' && (
@@ -806,6 +842,18 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                         >
                           <CheckCircle2 className="w-4 h-4 mr-1.5" />
                           Mark Complete / Disbursed
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            rejectMutation.reset();
+                            setRejectReason('');
+                            setShowRejectModalPayment(item);
+                          }}
+                          className="w-full py-2 px-3 min-h-[38px] bg-rose-900/40 hover:bg-rose-800/60 text-rose-300 font-semibold rounded-xl text-xs border border-rose-700/50 flex items-center justify-center transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5 mr-1.5" />
+                          Reject Approved Claim
                         </button>
                         <div className="w-full text-center text-[11px] text-emerald-400 font-medium">
                           Approved • Awaiting Final Payout
@@ -972,7 +1020,8 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                           </button>
                         )}
                         {(item.status === 'Pending' || item.status === 'InfoRequested') && (
-                          item.userId === user?.userId ? (
+                          <>
+                          {item.userId === user?.userId ? (
                             <span
                               className="inline-flex items-center px-2.5 py-1.5 min-h-[36px] bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold"
                               title="Peer review required: In our 4-admin system, you cannot self-approve your own payment request. Another Admin must approve it."
@@ -992,7 +1041,21 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                               <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
                               Approve & Categorize
                             </button>
-                          )
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              rejectMutation.reset();
+                              setRejectReason('');
+                              setShowRejectModalPayment(item);
+                            }}
+                            aria-label={`Reject payment request: ${item.title}`}
+                            className="inline-flex items-center px-3 py-1.5 min-h-[36px] bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg text-xs border border-rose-400/50 shadow transition-colors"
+                          >
+                            <X className="w-3.5 h-3.5 mr-1" />
+                            Reject
+                          </button>
+                          </>
                         )}
                         {item.status === 'Approved' && (
                           <div className="inline-flex items-center space-x-2">
@@ -1008,6 +1071,19 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                             >
                               <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
                               Mark Complete
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                rejectMutation.reset();
+                                setRejectReason('');
+                                setShowRejectModalPayment(item);
+                              }}
+                              className="inline-flex items-center px-2.5 py-1.5 min-h-[36px] bg-rose-900/40 hover:bg-rose-800/60 text-rose-300 font-medium rounded-lg text-xs border border-rose-700/50 shadow transition-colors"
+                              title="Reject this approved claim before payout"
+                            >
+                              <X className="w-3.5 h-3.5 mr-1" />
+                              Reject
                             </button>
                           </div>
                         )}
@@ -1081,6 +1157,18 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
             setShowApproveModalPayment(null);
           }}
           onConfirm={(paymentId, dto) => approveMutation.mutate({ paymentId, dto })}
+          onReject={(paymentId, reason) => {
+            approveMutation.reset();
+            const currentItem = showApproveModalPayment;
+            setShowApproveModalPayment(null);
+            if (currentItem) {
+              rejectMutation.mutate({
+                paymentId,
+                reason,
+                version: currentItem.version ?? 1,
+              });
+            }
+          }}
         />
       )}
 
@@ -1219,6 +1307,91 @@ export const SiteExpensesView: React.FC<SiteExpensesViewProps> = ({
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow transition-colors disabled:opacity-50 min-h-[42px] flex items-center"
               >
                 {markPaidMutation.isPending ? 'Processing...' : 'Confirm Completed'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADMIN REJECT PAYMENT REQUEST */}
+      {showRejectModalPayment && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="site-reject-title">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 id="site-reject-title" className="text-lg font-bold text-white">Reject Payment Request</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Add a reason so the employee knows why this claim was rejected.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  rejectMutation.reset();
+                  setShowRejectModalPayment(null);
+                }}
+                className="text-slate-400 hover:text-white p-1"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl text-xs space-y-1">
+              <span className="font-semibold text-white block">{showRejectModalPayment.title}</span>
+              <span className="text-slate-400">
+                Amount: ₹{(showRejectModalPayment.amount || 0).toLocaleString('en-IN')} | Submitter: {showRejectModalPayment.submitterName}
+              </span>
+            </div>
+
+            <div>
+              <label htmlFor="site-reject-reason" className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                Reason for Rejection *
+              </label>
+              <textarea
+                id="site-reject-reason"
+                rows={3}
+                required
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Explain why this request is being rejected..."
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-rose-500"
+              />
+            </div>
+
+            {rejectMutation.error && (
+              <div className="bg-rose-500/15 border border-rose-500/30 rounded-xl p-3 text-xs text-rose-300">
+                {(rejectMutation.error as any)?.response?.data?.detail ||
+                  (rejectMutation.error as any)?.response?.data?.message ||
+                  (rejectMutation.error as Error)?.message ||
+                  'Could not reject this request.'}
+              </div>
+            )}
+
+            <div className="pt-2 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => {
+                  rejectMutation.reset();
+                  setShowRejectModalPayment(null);
+                }}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!rejectReason.trim() || rejectMutation.isPending}
+                onClick={() => {
+                  rejectMutation.mutate({
+                    paymentId: showRejectModalPayment.id,
+                    reason: rejectReason.trim(),
+                    version: showRejectModalPayment.version ?? 1,
+                  });
+                }}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs shadow transition-colors disabled:opacity-50 min-h-[40px]"
+              >
+                {rejectMutation.isPending ? 'Rejecting...' : 'Confirm Rejection'}
               </button>
             </div>
           </div>

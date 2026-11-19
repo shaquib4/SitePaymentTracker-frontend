@@ -220,7 +220,7 @@ export const InitiatePaymentModal: React.FC<InitiatePaymentModalProps> = ({
           </div>
 
           {/* Date Duration */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-4">
             <div className="min-w-0 w-full">
               <label className="block text-xs font-semibold text-slate-300 uppercase mb-1 truncate">
                 Start Date *
@@ -272,7 +272,7 @@ export const InitiatePaymentModal: React.FC<InitiatePaymentModalProps> = ({
           <div className="space-y-2">
             <label className="block text-xs font-semibold text-slate-300 uppercase flex items-center">
               <Layers className="w-3.5 h-3.5 mr-1 text-amber-400" />
-              Expense / Wage Category *
+              Expense / Wage Category (Optional)
             </label>
 
             <div className="flex space-x-4 text-xs">
@@ -304,7 +304,7 @@ export const InitiatePaymentModal: React.FC<InitiatePaymentModalProps> = ({
                 onChange={(e) => setSelectedCategoryId(e.target.value)}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
               >
-                <option value="">Select a Category</option>
+                <option value="">-- Skip / Default Category (General) --</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -316,7 +316,7 @@ export const InitiatePaymentModal: React.FC<InitiatePaymentModalProps> = ({
                 type="text"
                 value={customCategory}
                 onChange={(e) => setCustomCategory(e.target.value)}
-                placeholder="e.g. Salary, Supervisor Wages, Travel Allowance"
+                placeholder="Optional: Salary, Supervisor Wages, Travel Allowance (Defaults to General)"
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
               />
             )}

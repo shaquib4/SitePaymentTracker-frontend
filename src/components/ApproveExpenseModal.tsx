@@ -23,6 +23,7 @@ interface ApproveExpenseModalProps {
   serverError?: string;
   onClose: () => void;
   onConfirm: (paymentId: string, dto: ApprovePaymentDto) => void;
+  onReject?: (paymentId: string, reason: string) => void;
 }
 
 export const ApproveExpenseModal: React.FC<ApproveExpenseModalProps> = ({
@@ -34,6 +35,7 @@ export const ApproveExpenseModal: React.FC<ApproveExpenseModalProps> = ({
   serverError,
   onClose,
   onConfirm,
+  onReject,
 }) => {
   const maxRequestedAmount = Number(
     payment.requestedAmount && payment.requestedAmount > 0 ? payment.requestedAmount : payment.amount
@@ -45,6 +47,8 @@ export const ApproveExpenseModal: React.FC<ApproveExpenseModalProps> = ({
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>(payment.categoryId || '');
   const [newCategoryName, setNewCategoryName] = useState<string>('');
   const [comments, setComments] = useState<string>('');
+  const [isRejectMode, setIsRejectMode] = useState<boolean>(false);
+  const [rejectReason, setRejectReason] = useState<string>('');
 
   const parsedApproved = Number(approvedAmountInput);
   const isAmountValid =
@@ -263,23 +267,77 @@ export const ApproveExpenseModal: React.FC<ApproveExpenseModalProps> = ({
           </div>
         )}
 
-        <div className="pt-2 flex justify-end space-x-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={isPending || isSelfApproval || !isAmountValid}
-            onClick={handleSubmit}
-            className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs shadow transition-colors disabled:opacity-50 min-h-[40px]"
-          >
-            {isPending ? 'Processing...' : `Approve ₹${isAmountValid ? parsedApproved.toLocaleString('en-IN') : '0'}`}
-          </button>
-        </div>
+        {isRejectMode ? (
+          <div className="bg-rose-950/40 border border-rose-800/60 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-rose-300 uppercase">Reject Request Reason</span>
+              <button
+                type="button"
+                onClick={() => setIsRejectMode(false)}
+                className="text-xs text-slate-400 hover:text-white"
+              >
+                Back to Review
+              </button>
+            </div>
+            <textarea
+              rows={2}
+              required
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Explain why this request is being rejected..."
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-rose-500"
+            />
+            <div className="flex justify-end space-x-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsRejectMode(false)}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!rejectReason.trim() || isPending}
+                onClick={() => onReject && onReject(payment.id, rejectReason.trim())}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg text-xs shadow transition-colors disabled:opacity-50"
+              >
+                {isPending ? 'Rejecting...' : 'Confirm Rejection'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="pt-2 flex items-center justify-between gap-3">
+            {onReject ? (
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setIsRejectMode(true)}
+                className="px-3 py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 font-bold rounded-xl text-xs transition-colors flex items-center min-h-[40px]"
+              >
+                <X className="w-4 h-4 mr-1 text-rose-400" />
+                Reject Claim
+              </button>
+            ) : <div />}
+
+            <div className="flex space-x-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold min-h-[40px]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isPending || isSelfApproval || !isAmountValid}
+                onClick={handleSubmit}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs shadow transition-colors disabled:opacity-50 min-h-[40px]"
+              >
+                {isPending ? 'Processing...' : `Approve ₹${isAmountValid ? parsedApproved.toLocaleString('en-IN') : '0'}`}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

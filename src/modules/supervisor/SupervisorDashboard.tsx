@@ -80,6 +80,7 @@ export const SupervisorDashboard: React.FC = () => {
 
   const [showMaterialModal, setShowMaterialModal] = useState(false);
   const [matTitle, setMatTitle] = useState('');
+  const [matCategory, setMatCategory] = useState('');
   const [matDesc, setMatDesc] = useState('');
   const [matAmount, setMatAmount] = useState('');
   const [matSiteId, setMatSiteId] = useState('');
@@ -237,6 +238,7 @@ export const SupervisorDashboard: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['supervisor-payments'] });
       setShowMaterialModal(false);
       setMatTitle('');
+      setMatCategory('');
       setMatDesc('');
       setMatAmount('');
     },
@@ -1310,7 +1312,7 @@ export const SupervisorDashboard: React.FC = () => {
                   title: matTitle,
                   description: matDesc,
                   amount: parseFloat(matAmount),
-                  category: 'General Materials',
+                  category: matCategory.trim() || 'General Materials',
                   currency: 'INR',
                   siteId: matSiteId || undefined,
                   expenseYear: currentCalendarYear,
@@ -1328,6 +1330,19 @@ export const SupervisorDashboard: React.FC = () => {
                   value={matTitle}
                   onChange={(e) => setMatTitle(e.target.value)}
                   placeholder="e.g. 50 Bags Ultratech Cement"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                  Category <span className="text-slate-400 font-normal normal-case">(Optional - defaults to General Materials)</span>
+                </label>
+                <input
+                  type="text"
+                  value={matCategory}
+                  onChange={(e) => setMatCategory(e.target.value)}
+                  placeholder="Optional: Cement, Sariya, Diesel, Transport..."
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
               </div>
@@ -1361,7 +1376,7 @@ export const SupervisorDashboard: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Start Date</label>
                   <input
@@ -1369,7 +1384,7 @@ export const SupervisorDashboard: React.FC = () => {
                     required
                     value={matStartDate}
                     onChange={(e) => setMatStartDate(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500 min-h-[42px]"
                   />
                 </div>
                 <div>
@@ -1379,7 +1394,7 @@ export const SupervisorDashboard: React.FC = () => {
                     required
                     value={matEndDate}
                     onChange={(e) => setMatEndDate(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500 min-h-[42px]"
                   />
                 </div>
               </div>

@@ -1237,6 +1237,19 @@ export const AdminDashboard: React.FC = () => {
                             <CheckCircle2 className="w-4 h-4 mr-1.5" />
                             Mark Complete / Disbursed
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              rejectMutation.reset();
+                              setRejectReason('');
+                              setShowRejectModalPayment(p);
+                            }}
+                            aria-label={`Reject approved payment request from ${p.submitterName || 'employee'}`}
+                            className="w-full py-2 px-3 min-h-[38px] bg-rose-900/40 hover:bg-rose-800/60 text-rose-300 font-semibold rounded-xl text-xs border border-rose-700/50 flex items-center justify-center transition-colors"
+                          >
+                            <X className="w-3.5 h-3.5 mr-1.5" />
+                            Reject Approved Claim
+                          </button>
                           <div className="w-full text-center text-[11px] text-emerald-400 font-medium">
                             Approved (v{p.version}) • Awaiting Disbursement
                           </div>
@@ -1473,6 +1486,20 @@ export const AdminDashboard: React.FC = () => {
                               >
                                 <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
                                 Mark Complete
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  rejectMutation.reset();
+                                  setRejectReason('');
+                                  setShowRejectModalPayment(p);
+                                }}
+                                aria-label={`Reject approved payment request from ${p.submitterName || 'employee'}`}
+                                className="inline-flex items-center px-2.5 py-1 bg-rose-900/40 hover:bg-rose-800/60 text-rose-300 font-medium rounded-lg text-xs border border-rose-700/50 shadow transition-colors"
+                                title="Reject this approved claim before payout"
+                              >
+                                <X className="w-3.5 h-3.5 mr-1" />
+                                Reject
                               </button>
                             </div>
                           )}
@@ -2685,6 +2712,17 @@ export const AdminDashboard: React.FC = () => {
             setShowApproveModalPayment(null);
           }}
           onConfirm={(paymentId, dto) => approveMutation.mutate({ paymentId, dto })}
+          onReject={(paymentId, reason) => {
+            approveMutation.reset();
+            const currentItem = showApproveModalPayment;
+            setShowApproveModalPayment(null);
+            if (currentItem) {
+              rejectMutation.mutate({
+                paymentId,
+                dto: { reason, version: currentItem.version },
+              });
+            }
+          }}
         />
       )}
 
